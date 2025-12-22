@@ -5,9 +5,9 @@ import com.getcapacitor.BridgeActivity
 
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        // Registrace vlastního nativního pluginu
+        // Registrace vlastního nativního pluginu -- musí být před super.onCreate, aby o něm Bridge věděl při inicializaci
         registerPlugin(AiProducerPlugin::class.java)
+        
+        super.onCreate(savedInstanceState)
     }
 }
