@@ -34,7 +34,7 @@ jobs:
 
       # Krok 4: Instalace frontendových závislostí
       - name: Install npm dependencies
-        run: npm ci
+        run: npm install
 
       # Krok 5: Sestavení webové části aplikace
       - name: Build web app
