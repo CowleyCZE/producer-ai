@@ -148,76 +148,37 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Fáze zpracování */}
-      {processingPhase !== 'idle' && (
-        <div style={{
-          padding: '16px',
-          backgroundColor: processingPhase === 'error' ? '#7f1d1d' : '#1e3a5f',
-          borderRadius: '12px',
-          marginBottom: '20px',
-          border: processingPhase === 'error' ? '1px solid #dc2626' : '1px solid #3b82f6'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '8px'
-          }}>
-            {processingPhase !== 'complete' && processingPhase !== 'error' && (
-              <div style={{
-                width: '20px',
-                height: '20px',
-                border: '3px solid #60a5fa',
-                borderTopColor: 'transparent',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite'
-              }} />
-            )}
-            <span style={{
-              color: processingPhase === 'error' ? '#fca5a5' : '#bfdbfe',
-              fontWeight: '600',
-              fontSize: '1rem'
-            }}>
-              {PHASE_MESSAGES[processingPhase]}
-            </span>
-          </div>
+      {/* Výpočet progressu pro InputStage */}
+      {(() => {
+        const getProgress = () => {
+          switch (processingPhase) {
+            case 'preparing': return 15;
+            case 'sending': return 30;
+            case 'processing': return 60;
+            case 'receiving': return 80;
+            case 'parsing': return 95;
+            case 'complete': return 100;
+            default: return 0;
+          }
+        };
 
-          {/* Progress bar */}
-          {processingPhase !== 'idle' && processingPhase !== 'error' && (
-            <div style={{
-              height: '4px',
-              backgroundColor: '#1e40af',
-              borderRadius: '2px',
-              overflow: 'hidden'
-            }}>
-              <div style={{
-                height: '100%',
-                backgroundColor: '#60a5fa',
-                width: processingPhase === 'preparing' ? '15%'
-                  : processingPhase === 'sending' ? '30%'
-                    : processingPhase === 'processing' ? '60%'
-                      : processingPhase === 'receiving' ? '80%'
-                        : processingPhase === 'parsing' ? '95%'
-                          : '100%',
-                transition: 'width 0.3s ease-out'
-              }} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {appState === AppState.INPUT && (
-        <InputStage
-          context={context}
-          setContext={setContext}
-          lyrics={lyrics}
-          setLyrics={setLyrics}
-          selectedMode={selectedMode}
-          setSelectedMode={setSelectedMode}
-          onStart={handleStartAnalysis}
-          isLoading={isLoading}
-        />
-      )}
+        return (
+          appState === AppState.INPUT && (
+            <InputStage
+              context={context}
+              setContext={setContext}
+              lyrics={lyrics}
+              setLyrics={setLyrics}
+              selectedMode={selectedMode}
+              setSelectedMode={setSelectedMode}
+              onStart={handleStartAnalysis}
+              isLoading={isLoading}
+              progress={getProgress()}
+              status={PHASE_MESSAGES[processingPhase]}
+            />
+          )
+        );
+      })()}
 
       {appState === AppState.EDITING && (
         <EditingStage
