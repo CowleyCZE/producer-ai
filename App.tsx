@@ -4,7 +4,7 @@ import EditingStage from './components/EditingStage';
 import FinalStage from './components/FinalStage';
 import ModelPicker from './components/ModelPicker';
 import { AppState, LyricSegment, FinalOutput, AiMode } from './types';
-import { analyzeLyrics, generateFinalOutput } from './services/gemini';
+import { analyzeLyrics, generateFinalOutput } from './services/geminiService';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.INPUT);
