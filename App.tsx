@@ -170,9 +170,9 @@ const App: React.FC = () => {
               lyrics={lyrics}
               setLyrics={setLyrics}
               selectedMode={selectedMode}
-              setSelectedMode={setSelectedMode}
-              onStart={handleStartAnalysis}
-              isLoading={isLoading}
+              onSelectMode={setSelectedMode}
+              onAnalyze={handleStartAnalysis}
+              isAnalyzing={isLoading}
               progress={getProgress()}
               status={PHASE_MESSAGES[processingPhase]}
             />
