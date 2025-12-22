@@ -5,6 +5,7 @@ name: Sestavení pro Android
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,18 +21,20 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
       # Krok 3: Nastavení prostředí Node.js (potřebné pro npm a Capacitor)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22' # Použijeme stabilní verzi Node.js
+          node-version: '22'
+          cache: 'npm'
 
       # Krok 4: Instalace frontendových závislostí
       - name: Install npm dependencies
-        run: npm install
+        run: npm ci
 
       # Krok 5: Sestavení webové části aplikace
       - name: Build web app
@@ -41,22 +44,33 @@ jobs:
       - name: Sync Capacitor project
         run: npx cap sync android
 
-      # Krok 7: Příprava sestavení Androidu (Oprávnění a stažení modelu)
-      - name: Prepare Android Build (Permissions and Model Download)
+      # Krok 7: Cache pro TFLite model (1.4 GB)
+      - name: Cache TFLite model
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/assets/gemma-it-2b-int4.tflite
+          key: ${{ runner.os }}-tflite-model-v1
+
+      # Krok 8: Příprava sestavení Androidu (Oprávnění a stažení modelu)
+      - name: Prepare Android Build
         run: |
           chmod +x android/gradlew
-          echo "Vytvářím složku assets..."
           mkdir -p android/app/src/main/assets
-          echo "Stahuji TFLite model... (cca 1.4 GB, může to trvat několik minut)"
-          curl -L "https://huggingface.co/Kaggle/gemma/resolve/main/tflite/gemma-it-2b-int4/1/gemma-it-2b-int4.tflite" -o android/app/src/main/assets/gemma-it-2b-int4.tflite
+          if [ "${{ steps.cache-model.outputs.cache-hit }}" != "true" ]; then
+            echo "Stahuji TFLite model..."
+            curl -L "https://huggingface.co/Kaggle/gemma/resolve/main/tflite/gemma-it-2b-int4/1/gemma-it-2b-int4.tflite" -o android/app/src/main/assets/gemma-it-2b-int4.tflite
+          else
+            echo "Model nalezen v cache."
+          fi
 
-      # Krok 8: Sestavení Debug APK pomocí Gradle
+      # Krok 9: Sestavení Debug APK pomocí Gradle
       - name: Build Debug APK
-        run: ./android/gradlew -p android assembleDebug
+        run: ./android/gradlew -p android assembleDebug --no-daemon
 
-      # Krok 9: Nahrání výsledného APK souboru jako artefaktu
+      # Krok 10: Nahrání výsledného APK souboru jako artefaktu
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug # Název artefaktu
-          path: android/app/build/outputs/apk/debug/app-debug.apk # Cesta k vygenerovanému APK
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
