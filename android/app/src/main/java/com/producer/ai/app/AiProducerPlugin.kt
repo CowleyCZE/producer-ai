@@ -8,24 +8,38 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 @CapacitorPlugin(name = "AiProducer")
 class AiProducerPlugin : Plugin() {
 
-    private lateinit var aiProducerService: AiProducerService
-    private val scope = CoroutineScope(Dispatchers.IO)
+    // Použijeme 'lazy' inicializaci, aby se služba vytvořila až při prvním použití
+    private val aiProducerService: AiProducerService by lazy {
+        AiProducerService(context)
+    }
 
-    override fun load() {
-        super.load()
-        // Inicializace naší servisní třídy s kontextem aplikace
-        aiProducerService = AiProducerService(context)
-        scope.launch {
-            // Předběžná inicializace modelu na pozadí
-            aiProducerService.initialize()
+    private val scope = CoroutineScope(Dispatchers.Main)
+    private var isInitialized = false
+
+    // Nová metoda pro zajištění inicializace, volaná před každou akcí
+    private suspend fun ensureInitialized(call: PluginCall): Boolean {
+        if (isInitialized) return true
+
+        return withContext(Dispatchers.IO) {
+            val initResult = aiProducerService.initialize()
+            initResult.onSuccess {
+                isInitialized = true
+            }.onFailure { error ->
+                // Pokud inicializace selže, pošleme chybu na frontend a aplikace nespadne
+                call.reject("Model initialization failed: ${error.message}", error)
+                isInitialized = false
+            }
+            isInitialized
         }
     }
+
 
     @PluginMethod
     fun analyzeLyrics(call: PluginCall) {
@@ -34,9 +48,13 @@ class AiProducerPlugin : Plugin() {
         val selectedMode = call.getString("selectedMode") ?: "AUTO"
 
         scope.launch {
-            val result = aiProducerService.analyzeLyrics(text, context, selectedMode)
+            if (!ensureInitialized(call)) return@launch
+
+            val result = withContext(Dispatchers.IO) {
+                aiProducerService.analyzeLyrics(text, context, selectedMode)
+            }
+
             result.onSuccess { analysisResult ->
-                // Převedeme Kotlin datovou třídu na JSON řetězec a pak na JSObject
                 val jsonString = Json.encodeToString(analysisResult)
                 val jsObject = JSObject(jsonString)
                 call.resolve(jsObject)

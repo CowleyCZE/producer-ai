@@ -24,8 +24,11 @@ export const analyzeLyrics = async (text: string, context: string, selectedMode:
     }));
     return result;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Critical Analysis Error from native plugin:", error);
+    // Zobrazí uživateli alert s chybou
+    alert(`Chyba z nativního modulu: ${error.message}`);
+    
     // Vytvoření fallback objektu v případě chyby
     return {
       mode: selectedMode,

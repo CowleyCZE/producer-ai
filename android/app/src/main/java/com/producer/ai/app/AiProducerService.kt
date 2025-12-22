@@ -63,20 +63,19 @@ class AiProducerService(private val context: Context) {
         - Pokud je řádek technicky špatný, nabídni 3 varianty úpravy.
     """.trimIndent()
 
-    // Metoda pro inicializaci LLM
-    // Musíte stáhnout .tflite model (např. Gemma 2B) a umístit ho do 'assets'
-    suspend fun initialize() {
-        withContext(Dispatchers.IO) {
-            val modelName = "gemma-it-2b-int4.tflite" // Změňte na název vašeho modelu
-            val modelPath = copyModelFromAssets(modelName)
+    // Metoda pro inicializaci LLM, nyní vrací Result pro lepší ošetření chyb
+    fun initialize(): Result<Unit> = runCatching {
+        if (llmInference != null) return@runCatching // Již inicializováno
 
-            val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(modelPath.absolutePath)
-                .setSystemPrompt(systemInstruction)
-                .build()
+        val modelName = "gemma-it-2b-int4.tflite" // Název vašeho modelu
+        val modelPath = copyModelFromAssets(modelName)
 
-            llmInference = LlmInference.createFromOptions(context, options)
-        }
+        val options = LlmInference.LlmInferenceOptions.builder()
+            .setModelPath(modelPath.absolutePath)
+            .setSystemPrompt(systemInstruction)
+            .build()
+
+        llmInference = LlmInference.createFromOptions(context, options)
     }
 
     // Hlavní analytická funkce
