@@ -67,7 +67,7 @@ class AiProducerService(private val context: Context) {
     // Musíte stáhnout .tflite model (např. Gemma 2B) a umístit ho do 'assets'
     suspend fun initialize() {
         withContext(Dispatchers.IO) {
-            val modelName = "gemma-2b-it-cpu-int4.tflite" // Změňte na název vašeho modelu
+            val modelName = "gemma-it-2b-int4.tflite" // Změňte na název vašeho modelu
             val modelPath = copyModelFromAssets(modelName)
 
             val options = LlmInference.LlmInferenceOptions.builder()

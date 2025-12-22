@@ -41,9 +41,14 @@ jobs:
       - name: Sync Capacitor project
         run: npx cap sync android
 
-      # Krok 7: Udělení oprávnění pro spuštění Gradle
-      - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
+      # Krok 7: Příprava sestavení Androidu (Oprávnění a stažení modelu)
+      - name: Prepare Android Build (Permissions and Model Download)
+        run: |
+          chmod +x android/gradlew
+          echo "Vytvářím složku assets..."
+          mkdir -p android/app/src/main/assets
+          echo "Stahuji TFLite model... (cca 1.4 GB, může to trvat několik minut)"
+          curl -L "https://huggingface.co/Kaggle/gemma/resolve/main/tflite/gemma-it-2b-int4/1/gemma-it-2b-int4.tflite" -o android/app/src/main/assets/gemma-it-2b-int4.tflite
 
       # Krok 8: Sestavení Debug APK pomocí Gradle
       - name: Build Debug APK
