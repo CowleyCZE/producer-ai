@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import android.net.Uri
 // Krok 1: Definice datových tříd
 @Serializable
 data class Variant(
@@ -72,7 +73,44 @@ class AiProducerService(private val context: Context) {
  llmInference = LlmInference.createFromOptions(context, options)
  }
 
- suspend fun analyzeLyrics(text: String, context: String, selectedMode: String): Result<AnalysisResult> = runCatching {
+    fun loadModel(path: String): Result<Unit> = runCatching {
+        val uri = Uri.parse(path)
+        val fileStr = path
+        val modelFile = if (fileStr.startsWith("content://")) {
+            copyContentUriToCache(uri)
+        } else if (fileStr.startsWith("file://")) {
+            File(uri.path ?: fileStr)
+        } else {
+            File(fileStr)
+        }
+
+        if (!modelFile.exists()) {
+             throw IllegalArgumentException("Model file not found at: $modelFile")
+        }
+
+        val options = LlmInference.LlmInferenceOptions.builder()
+            .setModelPath(modelFile.absolutePath)
+            .setSystemPrompt(systemInstruction)
+            .build()
+            
+        llmInference = LlmInference.createFromOptions(context, options)
+    }
+
+    private fun copyContentUriToCache(uri: Uri): File {
+        val inputStream = context.contentResolver.openInputStream(uri) 
+            ?: throw IllegalArgumentException("Cannot open content URI: $uri")
+        val outputFile = File(context.cacheDir, "imported_model.tflite")
+        
+        inputStream.use { input ->
+            outputFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        return outputFile
+    }
+
+    // Hlavní analytická funkce
+    suspend fun analyzeLyrics(text: String, context: String, selectedMode: String): Result<AnalysisResult> = runCatching {
  val prompt = "$systemInstruction
 KONTEXT: $context
 TEXT: $text"

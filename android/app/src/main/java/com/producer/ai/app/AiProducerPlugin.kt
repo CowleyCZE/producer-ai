@@ -49,11 +49,25 @@ class AiProducerPlugin : Plugin() {
  isInitialized = true
  call.resolve()
  }.onFailure { error ->
- isInitialized = false
- call.reject("Chyba při načítání modelu z cesty: ${error.message}", Exception(error))
- }
- }
- }
+    @PluginMethod
+    fun loadModel(call: PluginCall) {
+        val path = call.getString("path")
+        if (path == null) {
+            call.reject("Path is required")
+            return
+        }
+
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                aiProducerService.loadModel(path)
+            }
+            result.onSuccess {
+                call.resolve()
+            }.onFailure { error ->
+                call.reject("Failed to load model: ${error.message}", error)
+            }
+        }
+    }
 
  @PluginMethod
  fun analyzeLyrics(call: PluginCall) {
