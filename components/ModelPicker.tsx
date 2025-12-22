@@ -1,5 +1,5 @@
 import React from 'react';
-import { FilePicker } from '@capgo/capacitor-file-picker';
+import { FilePicker } from '@capawesome/capacitor-file-picker';
 import { registerPlugin } from '@capacitor/core';
 
 // Definice našeho nativního pluginu
