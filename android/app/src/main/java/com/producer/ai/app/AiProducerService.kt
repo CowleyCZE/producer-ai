@@ -25,8 +25,8 @@ data class LyricSegment(
 )
 @Serializable
 data class AnalysisResult(
- val mode: String,
- var segments: List<LyricSegment>
+ val mode: String = "UNKNOWN",
+ var segments: List<LyricSegment> = emptyList()
 )
 @Serializable
 data class FinalOutput(
@@ -37,8 +37,12 @@ data class FinalOutput(
 class AiProducerService(private val context: Context) {
  private var llmInference: LlmInference? = null
  
- // JSON parser
- private val json = Json { isLenient = true; ignoreUnknownKeys = true }
+ // JSON parser - přidáno coerceInputValues pro robustnější parsování
+ private val json = Json { 
+     isLenient = true 
+     ignoreUnknownKeys = true 
+     coerceInputValues = true
+ }
  
  private val systemInstruction = """
  ROLE: Elitní Hip-Hopový Producent.
