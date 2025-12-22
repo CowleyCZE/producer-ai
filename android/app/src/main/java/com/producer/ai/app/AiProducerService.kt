@@ -54,17 +54,7 @@ class AiProducerService(private val context: Context) {
  setupInference(modelFile.absolutePath)
  }
 
- // NOVÁ METODA: Inicializace z vlastní cesty (stažený model v tabletu)
- fun initializeWithCustomPath(path: String): Result<Unit> = runCatching {
- val file = File(path)
- if (!file.exists()) throw Exception("Soubor modelu nebyl nalezen na cestě: $path")
- 
- // Uzavřeme předchozí instanci, pokud existuje, pro uvolnění RAM
- llmInference?.close()
- llmInference = null
- 
- setupInference(file.absolutePath)
- }
+
 
  private fun setupInference(modelPath: String) {
  val options = LlmInference.LlmInferenceOptions.builder()
@@ -90,7 +80,6 @@ class AiProducerService(private val context: Context) {
 
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelFile.absolutePath)
-            .setSystemPrompt(systemInstruction)
             .build()
             
         llmInference = LlmInference.createFromOptions(context, options)
@@ -111,9 +100,18 @@ class AiProducerService(private val context: Context) {
 
     // Hlavní analytická funkce
     suspend fun analyzeLyrics(text: String, context: String, selectedMode: String): Result<AnalysisResult> = runCatching {
- val prompt = "$systemInstruction
-KONTEXT: $context
-TEXT: $text"
+        val modeInstruction = if (selectedMode == "AUTO") "Detekuj nejvhodnější MÓD automaticky." else "Mód: $selectedMode."
+        
+        val prompt = """
+            INSTRUKCE: Vrať POUZE JSON podle zadaného schématu.
+            ${generateAnalysisSchemaInstruction()}
+
+            KONTEXT: $context
+            $modeInstruction
+
+            VSTUPNÍ TEXT K ANALÝZE:
+            $text
+        """.trimIndent()
  val rawResponse = llmInference?.generateResponse(prompt) ?: throw IllegalStateException("LlmInference not initialized.")
  val cleanedJson = cleanJsonString(rawResponse)
  json.decodeFromString<AnalysisResult>(cleanedJson)
