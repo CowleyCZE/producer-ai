@@ -36,19 +36,6 @@ class AiProducerPlugin : Plugin() {
  }
 
  // NOVÁ METODA: Umožňuje frontend aplikaci zvolit soubor z disku tabletu
- @PluginMethod
- fun loadModel(call: PluginCall) {
- val path = call.getString("path") ?: return call.reject("Nebyla zadána cesta k modelu")
- 
- scope.launch {
- val result = withContext(Dispatchers.IO) {
- aiProducerService.initializeWithCustomPath(path)
- }
- 
- result.onSuccess {
- isInitialized = true
- call.resolve()
- }.onFailure { error ->
     @PluginMethod
     fun loadModel(call: PluginCall) {
         val path = call.getString("path")
@@ -59,12 +46,14 @@ class AiProducerPlugin : Plugin() {
 
         scope.launch {
             val result = withContext(Dispatchers.IO) {
+                // Používáme novou robustní metodu loadModel v servise
                 aiProducerService.loadModel(path)
             }
             result.onSuccess {
+                isInitialized = true
                 call.resolve()
             }.onFailure { error ->
-                call.reject("Failed to load model: ${error.message}", error)
+                call.reject("Failed to load model: ${error.message}", Exception(error))
             }
         }
     }
