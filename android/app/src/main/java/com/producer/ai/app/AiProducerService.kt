@@ -88,7 +88,9 @@ class AiProducerService(private val context: Context) {
     private fun copyContentUriToCache(uri: Uri): File {
         val inputStream = context.contentResolver.openInputStream(uri) 
             ?: throw IllegalArgumentException("Cannot open content URI: $uri")
-        val outputFile = File(context.cacheDir, "imported_model.tflite")
+        // Zachováme původní příponu souboru (podporuje .bin i .tflite)
+        val extension = uri.lastPathSegment?.substringAfterLast('.', "bin") ?: "bin"
+        val outputFile = File(context.cacheDir, "imported_model.$extension")
         
         inputStream.use { input ->
             outputFile.outputStream().use { output ->
