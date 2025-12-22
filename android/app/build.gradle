@@ -1,8 +1,19 @@
 apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
 
 android {
     namespace = "com.producer.ai.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    compileSdk = rootProject.ext.compileSdkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
     defaultConfig {
         applicationId "com.producer.ai.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -15,6 +26,9 @@ android {
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
             noCompress "tflite"
+        }
+        ndk {
+            abiFilters 'arm64-v8a'
         }
     }
     buildTypes {
