@@ -1,0 +1,57 @@
+# Název pracovního postupu, zobrazí se na GitHubu
+name: Sestavení pro Android
+
+# Spustí se pokaždé, když nahrajete změny do větve 'main'
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    # Poběží na virtuálním stroji s nejnovějším Ubuntu
+    runs-on: ubuntu-latest
+
+    steps:
+      # Krok 1: Stažení kódu vašeho repozitáře
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Krok 2: Nastavení prostředí Java (potřebné pro Gradle a Android)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # Krok 3: Nastavení prostředí Node.js (potřebné pro npm a Capacitor)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Použijeme stabilní verzi Node.js
+
+      # Krok 4: Instalace frontendových závislostí
+      - name: Install npm dependencies
+        run: npm install
+
+      # Krok 5: Sestavení webové části aplikace
+      - name: Build web app
+        run: npm run build
+
+      # Krok 6: Synchronizace webové části s Android projektem
+      - name: Sync Capacitor project
+        run: npx cap sync android
+
+      # Krok 7: Udělení oprávnění pro spuštění Gradle
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      # Krok 8: Sestavení Debug APK pomocí Gradle
+      - name: Build Debug APK
+        run: ./android/gradlew -p android assembleDebug
+
+      # Krok 9: Nahrání výsledného APK souboru jako artefaktu
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug # Název artefaktu
+          path: android/app/build/outputs/apk/debug/app-debug.apk # Cesta k vygenerovanému APK
