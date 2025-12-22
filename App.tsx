@@ -104,7 +104,7 @@ const App: React.FC = () => {
       setFinalOutput(result);
       setProcessingPhase('complete');
       await new Promise(r => setTimeout(r, 300));
-      setAppState(AppState.FINAL);
+      setAppState(AppState.FINISHED);
     } catch (error) {
       console.error('Final generation failed:', error);
       setProcessingPhase('error');
@@ -228,7 +228,7 @@ const App: React.FC = () => {
         />
       )}
 
-      {appState === AppState.FINAL && finalOutput && (
+      {appState === AppState.FINISHED && finalOutput && (
         <FinalStage
           output={finalOutput}
           onRestart={() => setAppState(AppState.INPUT)}
