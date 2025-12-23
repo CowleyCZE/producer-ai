@@ -12,6 +12,12 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 @CapacitorPlugin(name = "AiProducer")
 class AiProducerPlugin : Plugin() {
+
+    // Konfigurace JSON pro zajištění, že se do výstupu dostanou i prázdná pole (encodeDefaults = true)
+    private val json = Json { 
+        encodeDefaults = true 
+        ignoreUnknownKeys = true
+    }
  
  private val aiProducerService: AiProducerService by lazy {
  AiProducerService(context)
@@ -72,7 +78,7 @@ class AiProducerPlugin : Plugin() {
  
  result.onSuccess { analysisResult ->
  try {
- val jsonString = Json.encodeToString(analysisResult)
+ val jsonString = json.encodeToString(analysisResult)
  call.resolve(JSObject(jsonString))
  } catch (e: Exception) {
  call.reject("Failed to parse analysis result", e)

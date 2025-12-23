@@ -16,10 +16,15 @@ const AiProducer = registerPlugin<AiProducerPlugin>("AiProducer");
 export const analyzeLyrics = async (text: string, context: string, selectedMode: AiMode): Promise<AnalysisResult> => {
   try {
     const result = await AiProducer.analyzeLyrics({ text, context, selectedMode });
-    
+
     // Nativní kód již vrací plně zpracovaný objekt, ale můžeme zde provést dodatečné úpravy pro frontend
+    if (!result.segments) {
+      console.warn("Native plugin returned no segments, using empty array.");
+      result.segments = [];
+    }
+
     result.segments = result.segments.map(seg => ({
-      ...seg, 
+      ...seg,
       selectedVariantId: null // Inicializace výběru na straně frontendu
     }));
     return result;
@@ -28,7 +33,7 @@ export const analyzeLyrics = async (text: string, context: string, selectedMode:
     console.error("Critical Analysis Error from native plugin:", error);
     // Zobrazí uživateli alert s chybou
     alert(`Chyba z nativního modulu: ${error.message}`);
-    
+
     // Vytvoření fallback objektu v případě chyby
     return {
       mode: selectedMode,
