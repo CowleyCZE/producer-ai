@@ -93,8 +93,28 @@ class AiProducerPlugin : Plugin() {
  fun regenerateSegment(call: PluginCall) {
  call.reject("Not implemented yet")
  }
- @PluginMethod
- fun generateFinalOutput(call: PluginCall) {
- call.reject("Not implemented yet")
- }
+    @PluginMethod
+    fun generateFinalOutput(call: PluginCall) {
+        val text = call.getString("text") ?: ""
+        val context = call.getString("context") ?: ""
+
+        scope.launch {
+            if (!ensureInitialized(call)) return@launch
+
+            val result = withContext(Dispatchers.IO) {
+                aiProducerService.generateFinalOutput(text, context)
+            }
+
+            result.onSuccess { finalOutput ->
+                try {
+                    val jsonString = json.encodeToString(finalOutput)
+                    call.resolve(JSObject(jsonString))
+                } catch (e: Exception) {
+                    call.reject("Failed to parse final output", e)
+                }
+            }.onFailure { error ->
+                call.reject("Error in generateFinalOutput: ${error.message}", Exception(error))
+            }
+        }
+    }
 }

@@ -132,16 +132,52 @@ class AiProducerService(private val context: Context) {
 
  private fun generateAnalysisSchemaInstruction(): String = "{ \"mode\": \"string\", \"segments\": [] }"
 
- private fun copyModelFromAssets(modelName: String): File {
- val modelFile = File(context.cacheDir, modelName)
- if (modelFile.exists() && modelFile.length() < 100 * 1024 * 1024) {
-     modelFile.delete()
- }
- if (!modelFile.exists()) {
- context.assets.open(modelName).use { input ->
- modelFile.outputStream().use { output -> input.copyTo(output) }
- }
- }
- return modelFile
- }
+    // Generování finálního výstupu
+    suspend fun generateFinalOutput(text: String, context: String): Result<FinalOutput> = runCatching {
+        val prompt = """
+            INSTRUKCE: Jsi zkušený hudební producent. Na základě níže uvedeného textu skladby a kontextu vytvoř detailní popis hudebního stylu (prompt pro AI generátor hudby).
+            
+            KONTEXT / STYL: $context
+            
+            TEXT SKLADBY:
+            $text
+            
+            POŽADAVEK:
+            Vrať POUZE validní JSON objekt s dvěma poli:
+            1. "lyrics": (zde zkopíruj kompletní text skladby jako jeden string s \n)
+            2. "musicDescription": (detailní popis hudby v angličtině, např. "Dark boombap beat, 95 bpm, lo-fi piano sample...")
+            
+            Formát JSON:
+            {
+              "lyrics": "...",
+              "musicDescription": "..."
+            }
+        """.trimIndent()
+
+        val rawResponse = llmInference?.generateResponse(prompt) ?: throw IllegalStateException("LlmInference not initialized.")
+        val cleanedJson = cleanJsonString(rawResponse)
+        
+        try {
+            json.decodeFromString<FinalOutput>(cleanedJson)
+        } catch (e: Exception) {
+            // Fallback pokud model nevrátí validní JSON
+            FinalOutput(
+                lyrics = text, // Vracíme původní text
+                musicDescription = cleanedJson.take(500) // Fallback: použijeme raw odpověď
+            )
+        }
+    }
+
+    private fun copyModelFromAssets(modelName: String): File {
+        val modelFile = File(context.cacheDir, modelName)
+        if (modelFile.exists() && modelFile.length() < 100 * 1024 * 1024) {
+            modelFile.delete()
+        }
+        if (!modelFile.exists()) {
+            context.assets.open(modelName).use { input ->
+                modelFile.outputStream().use { output -> input.copyTo(output) }
+            }
+        }
+        return modelFile
+    }
 }

@@ -5,7 +5,7 @@ import { AnalysisResult, FinalOutput, LyricSegment, Variant, AiMode } from "../t
 export interface AiProducerPlugin {
   analyzeLyrics(options: { text: string; context: string; selectedMode: AiMode }): Promise<AnalysisResult>;
   regenerateSegment(options: { allSegments: LyricSegment[], currentIndex: number }): Promise<{ variants: Variant[] }>;
-  generateFinalOutput(options: { segments: LyricSegment[], context: string }): Promise<FinalOutput>;
+  generateFinalOutput(options: { text: string; context: string }): Promise<FinalOutput>;
 }
 
 // Registrace pluginu - 'AiProducer' je jméno, které jsme definovali v @CapacitorPlugin anotaci v Kotlinu
@@ -69,7 +69,7 @@ export const generateFinalOutput = async (segments: LyricSegment[], context: str
   }).join("\n");
 
   try {
-    const result = await AiProducer.generateFinalOutput({ segments, context });
+    const result = await AiProducer.generateFinalOutput({ text: assembledText, context });
     return result;
   } catch (error) {
     console.error("Error generating final output from native plugin:", error);
