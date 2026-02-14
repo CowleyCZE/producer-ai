@@ -1,16 +1,27 @@
 export interface Variant {
   id: string;
   text: string;
-  type: string; // e.g., "Flow", "Rhyme", "Meaning"
+  type: string;
+  confidence?: number;
+}
+
+export interface SmartSuggestion {
+  id: string;
+  type: 'enhancement' | 'alternative' | 'rhyme' | 'flow' | 'mood';
+  text: string;
+  description: string;
+  confidence: number;
 }
 
 export interface LyricSegment {
   id: string;
   originalText: string;
   isProblematic: boolean;
-  issueDescription?: string; // e.g., "Rushing flow", "Weak rhyme"
+  issueDescription?: string;
   variants: Variant[];
-  selectedVariantId: string | null; // null means original is selected
+  selectedVariantId: string | null;
+  smartSuggestions?: SmartSuggestion[];
+  metaTags?: string[];
 }
 
 export interface AnalysisResult {
@@ -21,6 +32,25 @@ export interface AnalysisResult {
 export interface FinalOutput {
   lyrics: string;
   musicDescription: string;
+  confidence?: number;
+  metaTags?: string[];
+}
+
+export interface UserFeedback {
+  id: string;
+  timestamp: number;
+  segmentId?: string;
+  variantId?: string;
+  rating: 'good' | 'bad' | 'neutral';
+  comment?: string;
+}
+
+export interface PromptTemplate {
+  id: string;
+  mode: string;
+  name: string;
+  systemPrompt: string;
+  task: 'analyze' | 'regenerate' | 'finalize' | 'suggest' | 'metatags';
 }
 
 export enum AppState {
@@ -33,12 +63,12 @@ export enum AppState {
 
 export enum AiMode {
   AUTO = 'AUTO',
-  MODE_1 = 'MODE_1', // Adaptace podle Žánru
-  MODE_2 = 'MODE_2', // Adaptace podle Interpreta
-  MODE_3 = 'MODE_3', // Generování Promptu
-  MODE_4 = 'MODE_4', // Překlad a Analýza
-  MODE_5 = 'MODE_5', // Interaktivní Editace
-  MODE_6 = 'MODE_6', // Kompozice k Vokálu
+  MODE_1 = 'MODE_1',
+  MODE_2 = 'MODE_2',
+  MODE_3 = 'MODE_3',
+  MODE_4 = 'MODE_4',
+  MODE_5 = 'MODE_5',
+  MODE_6 = 'MODE_6',
 }
 
 export const MODE_DESCRIPTIONS: Record<AiMode, string> = {
@@ -50,3 +80,47 @@ export const MODE_DESCRIPTIONS: Record<AiMode, string> = {
   [AiMode.MODE_5]: "🎛️ MÓD 5: Interaktivní Editace / Remix",
   [AiMode.MODE_6]: "🎼 MÓD 6: Kompozice k Vokálu (Acappella)"
 };
+
+export enum ModelProvider {
+  GEMINI = 'gemini',
+  OLLAMA = 'ollama',
+  LOCAL = 'local'
+}
+
+export interface ModelConfig {
+  provider: ModelProvider;
+  modelName: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+export const DEFAULT_MODELS: Record<ModelProvider, ModelConfig> = {
+  [ModelProvider.GEMINI]: {
+    provider: ModelProvider.GEMINI,
+    modelName: 'gemini-2.0-flash-exp'
+  },
+  [ModelProvider.OLLAMA]: {
+    provider: ModelProvider.OLLAMA,
+    modelName: 'gemma:2b',
+    baseUrl: 'http://localhost:11434'
+  },
+  [ModelProvider.LOCAL]: {
+    provider: ModelProvider.LOCAL,
+    modelName: 'local-model'
+  }
+};
+
+export const META_TAG_SUGGESTIONS = [
+  { tag: '[Intro]', description: 'Úvodní část skladby' },
+  { tag: '[Verse]', description: 'Verš - hlavní lyrická část' },
+  { tag: '[Pre-Chorus]', description: 'Přechod mezi veršem a refrénem' },
+  { tag: '[Chorus]', description: 'Refrén - hlavní téma' },
+  { tag: '[Hook]', description: 'Chytlavá část skladby' },
+  { tag: '[Bridge]', description: 'Most - kontrastní část' },
+  { tag: '[Drop]', description: 'Kulminace - nejsilnější část' },
+  { tag: '[Outro]', description: 'Závěrečná část skladby' },
+  { tag: '[Break]', description: 'Přestávka - instrumentální část' },
+  { tag: '[Ad-Lib]', description: 'Improvizované vokály' },
+  { tag: '[Harmony]', description: 'Harmonická vrstva' },
+  { tag: '[Melody]', description: 'Melodická linka' },
+] as const;

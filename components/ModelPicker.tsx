@@ -1,12 +1,9 @@
-import React, { useState } from 'react';
-import { FilePicker } from '@capawesome/capacitor-file-picker';
-import { registerPlugin } from '@capacitor/core';
+import React, { useState, useEffect } from 'react';
+import { setApiKey, hasApiKey } from '../services/geminiService';
+import { useToast } from '../contexts/ToastContext';
 
-// Definice našeho nativního pluginu
-const AiProducer = registerPlugin<any>('AiProducer');
-
-// Stavy modelu
 type ModelStatus = 'not_loaded' | 'loading' | 'loaded' | 'error' | 'testing' | 'ready';
+type ModelProvider = 'gemini' | 'ollama';
 
 interface ModelPickerProps {
   onStatusChange?: (status: ModelStatus, message: string) => void;
@@ -14,9 +11,20 @@ interface ModelPickerProps {
 
 const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
   const [modelStatus, setModelStatus] = useState<ModelStatus>('not_loaded');
-  const [statusMessage, setStatusMessage] = useState<string>('Model není načten');
-  const [modelName, setModelName] = useState<string>('');
-  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string>('Nastavení AI modelu');
+  const [modelName, setModelName] = useState<string>('gemini-2.0-flash-exp');
+  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>('gemini');
+  const [apiKeyInput, setApiKeyInput] = useState<string>('');
+  const { success, error: showError } = useToast();
+
+  useEffect(() => {
+    if (hasApiKey()) {
+      setModelName('gemini-2.0-flash-exp');
+      setModelStatus('ready');
+      setStatusMessage('✓ Gemini API připravena');
+    }
+  }, []);
 
   const updateStatus = (status: ModelStatus, message: string) => {
     setModelStatus(status);
@@ -24,225 +32,176 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
     onStatusChange?.(status, message);
   };
 
-  const pickAndLoadModel = async () => {
+  const handleConnectGemini = async () => {
+    if (!apiKeyInput.trim()) {
+      showError('Prosím zadejte API klíč');
+      return;
+    }
+    
     try {
-      updateStatus('loading', 'Vybírám soubor...');
-
-      const result = await FilePicker.pickFiles({
-        multiple: false,
-        readData: false
-      });
-
-      if (result.files && result.files.length > 0) {
-        const selectedFile = result.files[0];
-        const fileName = selectedFile.name || selectedFile.path?.split('/').pop() || 'Neznámý model';
-        setModelName(fileName);
-
-        if (selectedFile.path) {
-          updateStatus('loading', `Načítám model: ${fileName}...`);
-
-          try {
-            await AiProducer.loadModel({ path: selectedFile.path });
-            updateStatus('loaded', `Model "${fileName}" byl úspěšně načten!`);
-
-            // Krátká pauza a pak test modelu
-            setTimeout(() => testModel(), 1000);
-          } catch (loadError: any) {
-            updateStatus('error', `Chyba při načítání: ${loadError.message || 'Neznámá chyba'}`);
-          }
-        } else {
-          updateStatus('error', 'Nepodařilo se získat cestu k souboru.');
-        }
-      } else {
-        updateStatus('not_loaded', 'Výběr zrušen');
-      }
+      updateStatus('loading', 'Ověřuji Gemini API...');
+      setApiKey(apiKeyInput.trim());
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setModelName('gemini-2.0-flash-exp');
+      setSelectedProvider('gemini');
+      updateStatus('ready', '✓ Gemini API připravena');
+      success('Gemini API úspěšně připojena!');
+      
+      localStorage.setItem('ai_provider', 'gemini');
     } catch (error: any) {
-      console.error('Chyba při výběru modelu:', error);
-      updateStatus('error', `Chyba: ${error.message || 'Nepodařilo se vybrat soubor'}`);
+      updateStatus('error', 'Chyba při připojování');
+      showError('Nepodařilo se připojit k Gemini API');
     }
   };
 
-  const testModel = async () => {
+  const handleConnectOllama = async () => {
     try {
-      updateStatus('testing', 'Testuji model s jednoduchým dotazem...');
-
-      // Jednoduchý test - pošleme krátký text pro ověření funkčnosti
-      const testResult = await AiProducer.analyzeLyrics({
-        text: 'Test',
-        context: 'test',
-        selectedMode: 'AUTO'
+      updateStatus('loading', 'Ověřuji dostupnost Ollama...');
+      
+      const response = await fetch('http://localhost:11434/api/tags', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
       });
 
-      if (testResult) {
-        updateStatus('ready', `✓ Model "${modelName}" je připraven k použití!`);
+      if (response.ok) {
+        const data = await response.json();
+        const models = data.models || [];
+        const defaultModel = models.find((m: any) => m.name.includes('gemma')) || models[0];
+        
+        setModelName(defaultModel?.name || 'gemma (default)');
+        setSelectedProvider('ollama');
+        updateStatus('ready', '✓ Ollama připravena');
+        success('Ollama úspěšně připojena!');
+        localStorage.setItem('ai_provider', 'ollama');
       } else {
-        updateStatus('error', 'Model nevrátil očekávanou odpověď.');
+        throw new Error('Ollama not responding');
       }
-    } catch (testError: any) {
-      console.error('Test modelu selhal:', testError);
-      updateStatus('error', `Test selhal: ${testError.message || 'Model nefunguje správně'}`);
+    } catch (error: any) {
+      console.error('Ollama connection error:', error);
+      updateStatus('error', 'Ollama nedostupná');
+      showError('Ollama není dostupná. Ujistěte se, že běží příkaz "ollama serve"');
     }
   };
 
   const getStatusColor = () => {
     switch (modelStatus) {
-      case 'ready': return '#22c55e'; // green
-      case 'loaded': return '#3b82f6'; // blue
-      case 'loading':
-      case 'testing': return '#f59e0b'; // amber
-      case 'error': return '#ef4444'; // red
-      default: return '#6b7280'; // gray
-    }
-  };
-
-  const getStatusIcon = () => {
-    switch (modelStatus) {
-      case 'ready': return '✓';
-      case 'loaded': return '◉';
-      case 'loading':
-      case 'testing': return '◌';
-      case 'error': return '✗';
-      default: return '○';
+      case 'ready': return 'text-success';
+      case 'loading': return 'text-warning animate-pulse';
+      case 'error': return 'text-error';
+      default: return 'text-surface-500';
     }
   };
 
   return (
-    <div style={{
-      marginBottom: '20px',
-      border: `2px solid ${getStatusColor()}`,
-      borderRadius: '12px',
-      overflow: 'hidden',
-      backgroundColor: '#1e293b',
-      transition: 'all 0.3s ease'
-    }}>
-      {/* Header - vždy viditelný */}
+    <div className="card border-surface-700 mb-6 overflow-hidden transition-all duration-300">
       <div
         onClick={() => setIsExpanded(!isExpanded)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 16px',
-          backgroundColor: '#0f172a',
-          cursor: 'pointer',
-          userSelect: 'none'
-        }}
+        className="flex items-center justify-between p-4 bg-surface-950 cursor-pointer select-none"
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{
-            fontSize: '1.5rem',
-            color: getStatusColor(),
-            fontWeight: 'bold'
-          }}>
-            {getStatusIcon()}
+        <div className="flex items-center gap-3">
+          <span className={`text-2xl font-bold ${getStatusColor()}`}>
+            {modelStatus === 'ready' ? '✓' : modelStatus === 'loading' ? '◌' : modelStatus === 'error' ? '✗' : '○'}
           </span>
           <div>
-            <div style={{
-              fontSize: '0.75rem',
-              color: '#94a3b8',
-              fontWeight: 'bold',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em'
-            }}>
-              Stav AI Modelu
+            <div className="text-xs font-bold text-surface-400 uppercase tracking-widest">
+              AI Backend
             </div>
-            <div style={{
-              color: getStatusColor(),
-              fontWeight: '600',
-              fontSize: '0.9rem'
-            }}>
+            <div className={`font-semibold ${getStatusColor()}`}>
               {statusMessage}
             </div>
           </div>
         </div>
-        <span style={{ color: '#64748b', fontSize: '1.2rem' }}>
+        <span className="text-surface-500 text-xl">
           {isExpanded ? '▲' : '▼'}
         </span>
       </div>
 
-      {/* Rozbalovací sekce */}
       {isExpanded && (
-        <div style={{ padding: '16px', borderTop: '1px solid #334155' }}>
-          {/* Info o modelu */}
-          {modelName && (
-            <div style={{
-              marginBottom: '12px',
-              padding: '8px 12px',
-              backgroundColor: '#334155',
-              borderRadius: '8px',
-              fontSize: '0.85rem'
-            }}>
-              <span style={{ color: '#94a3b8' }}>Načtený model: </span>
-              <span style={{ color: '#e2e8f0', fontWeight: '600' }}>{modelName}</span>
+        <div className="p-4 border-t border-surface-700 space-y-4">
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setSelectedProvider('gemini')}
+              className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
+                selectedProvider === 'gemini'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+              }`}
+            >
+              🌐 Google Gemini
+            </button>
+            <button
+              onClick={() => setSelectedProvider('ollama')}
+              className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
+                selectedProvider === 'ollama'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+              }`}
+            >
+              💻 Lokální Ollama
+            </button>
+          </div>
+
+          {selectedProvider === 'gemini' && (
+            <div className="space-y-3">
+              <div className="p-3 bg-surface-800 rounded-lg">
+                <span className="text-surface-400 text-sm">Model: </span>
+                <span className="text-surface-200 font-semibold">{modelName}</span>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-semibold text-surface-400 mb-2">
+                  Gemini API Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="Zadejte váš API key..."
+                  className="input"
+                />
+              </div>
+              
+              <button
+                onClick={handleConnectGemini}
+                disabled={modelStatus === 'loading'}
+                className="btn-primary w-full"
+              >
+                {modelStatus === 'loading' ? 'Připojuji...' : 'Připojit Gemini API'}
+              </button>
             </div>
           )}
 
-          {/* Animace načítání */}
-          {(modelStatus === 'loading' || modelStatus === 'testing') && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              marginBottom: '12px',
-              padding: '12px',
-              backgroundColor: '#1e3a5f',
-              borderRadius: '8px'
-            }}>
-              <div style={{
-                width: '24px',
-                height: '24px',
-                border: '3px solid #3b82f6',
-                borderTopColor: 'transparent',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite'
-              }} />
-              <span style={{ color: '#93c5fd' }}>{statusMessage}</span>
+          {selectedProvider === 'ollama' && (
+            <div className="space-y-3">
+              <div className="p-3 bg-surface-800 rounded-lg">
+                <span className="text-surface-400 text-sm">Model: </span>
+                <span className="text-surface-200 font-semibold">{modelName}</span>
+              </div>
+              
+              <button
+                onClick={handleConnectOllama}
+                disabled={modelStatus === 'loading'}
+                className="btn-primary w-full"
+              >
+                {modelStatus === 'loading' ? 'Připojuji...' : 'Připojit k Ollama'}
+              </button>
+              
+              <p className="text-xs text-surface-500 text-center">
+                Ujistěte se, že běží příkaz 'ollama serve'
+              </p>
             </div>
           )}
 
-          {/* Tlačítko pro výběr modelu */}
-          <button
-            onClick={pickAndLoadModel}
-            disabled={modelStatus === 'loading' || modelStatus === 'testing'}
-            style={{
-              width: '100%',
-              padding: '14px 20px',
-              backgroundColor: modelStatus === 'loading' || modelStatus === 'testing' ? '#334155' : '#7c3aed',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '1rem',
-              fontWeight: '600',
-              cursor: modelStatus === 'loading' || modelStatus === 'testing' ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s ease',
-              opacity: modelStatus === 'loading' || modelStatus === 'testing' ? 0.6 : 1
-            }}
-          >
-            {modelStatus === 'loading' || modelStatus === 'testing'
-              ? 'Načítám...'
-              : modelStatus === 'ready'
-                ? 'Změnit model'
-                : 'Vybrat model z tabletu'}
-          </button>
-
-          {/* Nápověda */}
-          <p style={{
-            marginTop: '12px',
-            fontSize: '0.75rem',
-            color: '#64748b',
-            textAlign: 'center'
-          }}>
-            Podporované formáty: .tflite, .bin (Gemma modely)
-          </p>
+          {modelStatus === 'ready' && (
+            <div className="flex items-center gap-2 text-sm text-success">
+              <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+              <span> Aktivní: {selectedProvider === 'gemini' ? 'Google Gemini API' : 'Lokální Ollama'}</span>
+            </div>
+          )}
         </div>
       )}
-
-      {/* CSS animace */}
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };

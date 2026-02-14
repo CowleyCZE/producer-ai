@@ -1,0 +1,29 @@
+{
+  "name": "Producer.ai - Lyric Architect",
+  "short_name": "Producer.ai",
+  "description": "AI-powered lyric analysis and music production tool",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#8b5cf6",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["music", "productivity", "utilities"],
+  "lang": "cs-CZ",
+  "dir": "ltr",
+  "prefer_related_applications": false
+}
