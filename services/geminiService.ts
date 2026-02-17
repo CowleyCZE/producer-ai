@@ -1,7 +1,8 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { AnalysisResult, FinalOutput, LyricSegment, Variant, SmartSuggestion, AiMode } from '../types';
+import { AnalysisResult, FinalOutput, LyricSegment, Variant, SmartSuggestion, AiMode, ModelProvider } from '../types';
 
 const GEMINI_MODEL = 'gemini-2.0-flash-exp';
+const OLLAMA_BASE_URL = 'http://localhost:11434';
 
 interface CacheEntry {
   result: any;
@@ -26,13 +27,11 @@ class SemanticCache {
   get(text: string, context: string, mode: string): any | null {
     const key = this.hashKey(text, context, mode);
     const entry = this.cache.get(key);
-    
     if (!entry) return null;
     if (Date.now() - entry.timestamp > this.TTL) {
       this.cache.delete(key);
       return null;
     }
-    
     console.log('[CACHE] Cache hit!');
     return entry.result;
   }
@@ -48,97 +47,6 @@ class SemanticCache {
 }
 
 export const semanticCache = new SemanticCache();
-
-interface ValidationResult {
-  isValid: boolean;
-  errors: string[];
-  data?: any;
-}
-
-const SCHEMAS = {
-  analysisResult: {
-    type: 'object',
-    properties: {
-      mode: { type: 'string' },
-      segments: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            originalText: { type: 'string' },
-            isProblematic: { type: 'boolean' },
-            issueDescription: { type: 'string' },
-            variants: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  text: { type: 'string' },
-                  type: { type: 'string', enum: ['Flow', 'Rhyme', 'Meaning', 'Hybrid'] },
-                  confidence: { type: 'number', minimum: 0, maximum: 1 }
-                },
-                required: ['id', 'text', 'type']
-              }
-            }
-          },
-          required: ['id', 'originalText', 'isProblematic', 'variants']
-        }
-      }
-    },
-    required: ['mode', 'segments']
-  },
-  finalOutput: {
-    type: 'object',
-    properties: {
-      lyrics: { type: 'string' },
-      musicDescription: { type: 'string' },
-      confidence: { type: 'number', minimum: 0, maximum: 1 },
-      metaTags: { type: 'array', items: { type: 'string' } }
-    },
-    required: ['lyrics', 'musicDescription']
-  }
-};
-
-function validateResponse(data: any, schema: keyof typeof SCHEMAS): ValidationResult {
-  const errors: string[] = [];
-  const schemaDef = SCHEMAS[schema];
-
-  try {
-    if (schema === 'analysisResult') {
-      if (!data.segments || !Array.isArray(data.segments)) {
-        errors.push('Missing or invalid segments array');
-      } else {
-        data.segments.forEach((seg: any, idx: number) => {
-          if (!seg.id) errors.push(`Segment ${idx}: missing id`);
-          if (!seg.originalText) errors.push(`Segment ${idx}: missing originalText`);
-          if (typeof seg.isProblematic !== 'boolean') errors.push(`Segment ${idx}: isProblematic must be boolean`);
-          if (!seg.variants || !Array.isArray(seg.variants)) {
-            errors.push(`Segment ${idx}: missing variants array`);
-          }
-        });
-      }
-    }
-
-    if (schema === 'finalOutput') {
-      if (!data.lyrics || typeof data.lyrics !== 'string') {
-        errors.push('Missing or invalid lyrics');
-      }
-      if (!data.musicDescription || typeof data.musicDescription !== 'string') {
-        errors.push('Missing or invalid musicDescription');
-      }
-    }
-  } catch (e: any) {
-    errors.push(`Validation error: ${e.message}`);
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    data: errors.length === 0 ? data : undefined
-  };
-}
 
 function parseJSONResponse(responseText: string): any {
   let jsonStr = responseText.trim();
@@ -179,6 +87,28 @@ const GENERATION_CONFIG = {
 };
 
 let genAI: GoogleGenerativeAI | null = null;
+let currentProvider: ModelProvider = ModelProvider.GEMINI;
+let ollamaModelName: string = 'qwen2.5:3b';
+
+export function getProvider(): ModelProvider {
+  const saved = localStorage.getItem('ai_provider');
+  if (saved === 'ollama') return ModelProvider.OLLAMA;
+  return ModelProvider.GEMINI;
+}
+
+export function setProvider(provider: ModelProvider): void {
+  currentProvider = provider;
+  localStorage.setItem('ai_provider', provider);
+}
+
+export function getOllamaModel(): string {
+  return localStorage.getItem('ollama_model') || 'qwen2.5:3b';
+}
+
+export function setOllamaModel(modelName: string): void {
+  ollamaModelName = modelName;
+  localStorage.setItem('ollama_model', modelName);
+}
 
 function getGenAI(): GoogleGenerativeAI {
   if (!genAI) {
@@ -198,6 +128,84 @@ export function setApiKey(apiKey: string): void {
 
 export function hasApiKey(): boolean {
   return !!(import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('gemini_api_key'));
+}
+
+export function isOllamaConnected(): boolean {
+  return localStorage.getItem('ai_provider') === 'ollama';
+}
+
+export async function testApiKey(): Promise<boolean> {
+  try {
+    const apiKey = localStorage.getItem('gemini_api_key');
+    if (!apiKey) return false;
+    
+    const testAI = new GoogleGenerativeAI(apiKey);
+    const model = testAI.getGenerativeModel({ model: GEMINI_MODEL });
+    
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
+      generationConfig: { maxOutputTokens: 10 }
+    });
+    
+    return !!result.response;
+  } catch (error) {
+    console.error('API key test failed:', error);
+    return false;
+  }
+}
+
+export async function testOllama(): Promise<boolean> {
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    const models = data.models || [];
+    if (models.length === 0) return false;
+    const defaultModel = models.find((m: any) => m.name.includes('qwen')) || models[0];
+    if (defaultModel) {
+      setOllamaModel(defaultModel.name);
+    }
+    return true;
+  } catch (error) {
+    console.error('Ollama test failed:', error);
+    return false;
+  }
+}
+
+async function callOllama(prompt: string, systemPrompt: string): Promise<string> {
+  const model = getOllamaModel();
+  
+  const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+  
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model,
+        prompt: fullPrompt,
+        stream: false,
+        format: 'json',
+        options: {
+          temperature: 0.7,
+          num_predict: 2048
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.response || '';
+  } catch (error: any) {
+    console.error('Ollama API Error:', error);
+    throw error;
+  }
 }
 
 export async function callGemini(prompt: string, systemPrompt: string): Promise<string> {
@@ -231,62 +239,190 @@ export async function callGemini(prompt: string, systemPrompt: string): Promise<
   }
 }
 
+export async function callAI(prompt: string, systemPrompt: string): Promise<string> {
+  const provider = getProvider();
+  
+  if (provider === ModelProvider.OLLAMA) {
+    return callOllama(prompt, systemPrompt);
+  }
+  
+  return callGemini(prompt, systemPrompt);
+}
+
+function getSystemPrompt(mode: AiMode, task: 'analyze' | 'regenerate' | 'finalize'): string {
+  const prompts: Record<string, string> = {
+    analyze: `You are an expert lyric analyst and music producer. Analyze the song lyrics and divide them into logical segments. Mark problematic segments (rhythm, rhyme issues) and suggest 2-3 fix variants. For EACH segment that has issues, you MUST provide variants. Return valid JSON: { "mode": "string", "segments": [{ "id": "1", "originalText": "...", "isProblematic": true/false, "issueDescription": "...", "variants": [{ "id": "v1", "text": "...", "type": "Flow|Rhyme|Meaning" }] }]}`,
+    regenerate: `You are a lyric engineer. Suggest 3 new variants for this lyric segment. Each variant should focus on different aspect. Always respond with valid JSON: { "variants": [{ "id": "s1", "text": "...", "type": "Flow|Rhyme|Meaning" }] }`,
+    finalize: `You are a music producer. Based on the lyrics, create a detailed music production description. Always respond with valid JSON: { "lyrics": "...", "musicDescription": "..." }`
+  };
+
+  return prompts[task] || prompts.analyze;
+}
+
+function analyzeLocally(text: string, selectedMode: AiMode): AnalysisResult {
+  const lines = text.split('\n').filter(l => l.trim());
+  
+  const problemPatterns = [
+    { pattern: /(\w+)\1+/gi, description: 'Repeated words' },
+    { pattern: /\b(the|and|a|to|of|in|is|it|for|on|at|you|we|they)\b.*\b(the|and|a|to|of|in|is|it|for|on|at|you|we|they)\b/gi, description: 'Repeated filler words' },
+  ];
+  
+  const segments: LyricSegment[] = lines.map((line, idx) => {
+    let isProblematic = false;
+    let issueDescription = '';
+    
+    for (const { pattern, description } of problemPatterns) {
+      if (pattern.test(line)) {
+        isProblematic = true;
+        issueDescription = description;
+        break;
+      }
+    }
+    
+    if (line.split(/\s+/).length > 12) {
+      isProblematic = true;
+      issueDescription = issueDescription ? issueDescription + '; Long line' : 'Long line - consider splitting';
+    }
+    
+    const variants: Variant[] = [];
+    if (isProblematic) {
+      variants.push({
+        id: `v-${idx}-1`,
+        text: line.replace(/\b(\w+)\1+\b/gi, '$1'),
+        type: 'Flow',
+        confidence: 0.8
+      });
+      variants.push({
+        id: `v-${idx}-2`,
+        text: line,
+        type: 'Meaning',
+        confidence: 0.7
+      });
+    }
+    
+    return {
+      id: `seg-${idx}`,
+      originalText: line,
+      isProblematic,
+      issueDescription: isProblematic ? issueDescription : undefined,
+      variants,
+      selectedVariantId: null
+    };
+  });
+  
+  return {
+    mode: selectedMode,
+    segments
+  };
+}
+
 export const analyzeLyrics = async (text: string, context: string, selectedMode: AiMode): Promise<AnalysisResult> => {
-  const cached = semanticCache.get(text, context, selectedMode);
-  if (cached) {
-    return cached;
+  if (!text.trim()) {
+    return { mode: selectedMode, segments: [] };
+  }
+  
+  const provider = getProvider();
+  const hasGeminiKey = hasApiKey();
+  
+  if (provider === ModelProvider.OLLAMA || !hasGeminiKey) {
+    try {
+      const cached = semanticCache.get(text, context, selectedMode);
+      if (cached) {
+        return cached;
+      }
+
+      const systemPrompt = getSystemPrompt(selectedMode, 'analyze');
+      const prompt = `Context: ${context}\n\nAnalyze these lyrics and find problematic segments. For EACH problematic segment, you MUST provide at least 2 variant suggestions.\n\nLyrics:\n${text}`;
+
+      const responseText = await callAI(prompt, systemPrompt);
+      const parsed = parseJSONResponse(responseText);
+      
+      const segments = (parsed.segments || []).map((seg: any, idx: number) => ({
+        id: seg.id || `seg-${idx}`,
+        originalText: seg.originalText || '',
+        isProblematic: seg.isProblematic || false,
+        issueDescription: seg.issueDescription || seg.issueDescription,
+        variants: (seg.variants || []).map((v: any, vIdx: number) => ({
+          id: v.id || `v-${idx}-${vIdx}`,
+          text: v.text || '',
+          type: v.type || 'Flow',
+          confidence: v.confidence || Math.random() * 0.3 + 0.7
+        })),
+        selectedVariantId: null
+      }));
+
+      const result: AnalysisResult = {
+        mode: parsed.mode || selectedMode,
+        segments
+      };
+
+      semanticCache.set(text, context, selectedMode, result);
+      return result;
+    } catch (error: any) {
+      console.error('Analysis Error, using local fallback:', error);
+      return analyzeLocally(text, selectedMode);
+    }
   }
 
-  const systemPrompt = getSystemPrompt(selectedMode, 'analyze');
-  const prompt = `Context: ${context}\n\nLyrics to analyze:\n${text}`;
-
   try {
-    const responseText = await callGemini(prompt, systemPrompt);
+    const cached = semanticCache.get(text, context, selectedMode);
+    if (cached) {
+      return cached;
+    }
+
+    const systemPrompt = getSystemPrompt(selectedMode, 'analyze');
+    const prompt = `Context: ${context}\n\nAnalyze these lyrics and find problematic segments. For EACH problematic segment, you MUST provide at least 2 variant suggestions.\n\nLyrics:\n${text}`;
+
+    const responseText = await callAI(prompt, systemPrompt);
     const parsed = parseJSONResponse(responseText);
     
-    const validation = validateResponse(parsed, 'analysisResult');
-    if (!validation.isValid) {
-      console.warn('Validation errors:', validation.errors);
-    }
+    const segments = (parsed.segments || []).map((seg: any, idx: number) => ({
+      id: seg.id || `seg-${idx}`,
+      originalText: seg.originalText || '',
+      isProblematic: seg.isProblematic || false,
+      issueDescription: seg.issueDescription || seg.issueDescription,
+      variants: (seg.variants || []).map((v: any, vIdx: number) => ({
+        id: v.id || `v-${idx}-${vIdx}`,
+        text: v.text || '',
+        type: v.type || 'Flow',
+        confidence: v.confidence || Math.random() * 0.3 + 0.7
+      })),
+      selectedVariantId: null
+    }));
 
     const result: AnalysisResult = {
       mode: parsed.mode || selectedMode,
-      segments: (parsed.segments || []).map((seg: any, idx: number) => ({
-        ...seg,
-        id: seg.id || `seg-${idx}`,
-        selectedVariantId: null,
-        variants: (seg.variants || []).map((v: any, vIdx: number) => ({
-          ...v,
-          id: v.id || `v-${vIdx}`,
-          confidence: v.confidence || Math.random() * 0.3 + 0.7
-        }))
-      }))
+      segments
     };
 
     semanticCache.set(text, context, selectedMode, result);
     return result;
   } catch (error: any) {
-    console.error('Analysis Error:', error);
-    return {
-      mode: selectedMode,
-      segments: text.split('\n').filter(l => l.trim()).map((line, idx) => ({
-        id: `line-${idx}`,
-        originalText: line,
-        isProblematic: false,
-        variants: [],
-        selectedVariantId: null
-      }))
-    };
+    console.error('Analysis Error, using local fallback:', error);
+    return analyzeLocally(text, selectedMode);
   }
 };
 
 export const regenerateSegment = async (allSegments: LyricSegment[], currentIndex: number): Promise<Variant[]> => {
+  const provider = getProvider();
+  const hasGeminiKey = hasApiKey();
+  
+  if ((provider === ModelProvider.OLLAMA || !hasGeminiKey) && provider !== ModelProvider.GEMINI) {
+    const segment = allSegments[currentIndex];
+    const words = segment.originalText.split(/\s+/);
+    return [
+      { id: 'v-local-1', text: segment.originalText.toUpperCase(), type: 'Flow', confidence: 0.6 },
+      { id: 'v-local-2', text: segment.originalText.toLowerCase(), type: 'Meaning', confidence: 0.5 },
+      { id: 'v-local-3', text: words.reverse().join(' '), type: 'Rhyme', confidence: 0.4 }
+    ];
+  }
+  
   const segment = allSegments[currentIndex];
   const systemPrompt = getSystemPrompt(AiMode.AUTO, 'regenerate');
   const prompt = `Original text: ${segment.originalText}\n\nOther lyrics for context:\n${allSegments.map(s => s.originalText).join('\n')}`;
 
   try {
-    const responseText = await callGemini(prompt, systemPrompt);
+    const responseText = await callAI(prompt, systemPrompt);
     const parsed = parseJSONResponse(responseText);
     
     return (parsed.variants || []).map((v: any, idx: number) => ({
@@ -309,30 +445,48 @@ export const generateFinalOutput = async (segments: LyricSegment[], context: str
     return seg.originalText;
   }).join("\n");
 
+  const provider = getProvider();
+  const hasGeminiKey = hasApiKey();
+  
+  if (provider === ModelProvider.OLLAMA || !hasGeminiKey) {
+    try {
+      const systemPrompt = getSystemPrompt(AiMode.AUTO, 'finalize');
+      const prompt = `Lyrics:\n${assembledText}\n\nContext: ${context}`;
+      
+      const responseText = await callAI(prompt, systemPrompt);
+      const parsed = parseJSONResponse(responseText);
+      
+      return {
+        lyrics: parsed.lyrics || assembledText,
+        musicDescription: parsed.musicDescription || 'Music description generated by Ollama',
+        confidence: 0.8
+      };
+    } catch (error) {
+      return {
+        lyrics: assembledText,
+        musicDescription: 'Music description requires API key',
+        confidence: 0
+      };
+    }
+  }
+
   const systemPrompt = getSystemPrompt(AiMode.AUTO, 'finalize');
   const prompt = `Lyrics:\n${assembledText}\n\nContext: ${context}`;
 
   try {
-    const responseText = await callGemini(prompt, systemPrompt);
+    const responseText = await callAI(prompt, systemPrompt);
     const parsed = parseJSONResponse(responseText);
     
-    const validation = validateResponse(parsed, 'finalOutput');
-    if (!validation.isValid) {
-      console.warn('Final output validation errors:', validation.errors);
-    }
-
     return {
       lyrics: parsed.lyrics || assembledText,
       musicDescription: parsed.musicDescription || 'Music description not generated.',
-      confidence: parsed.confidence || 0.8,
-      metaTags: parsed.metaTags || []
+      confidence: parsed.confidence || 0.8
     };
   } catch (error) {
     return {
       lyrics: assembledText,
       musicDescription: 'Generování popisu selhalo.',
-      confidence: 0,
-      metaTags: []
+      confidence: 0
     };
   }
 };
@@ -342,17 +496,37 @@ export const getSmartSuggestions = async (
   allSegments: LyricSegment[],
   context: string
 ): Promise<SmartSuggestion[]> => {
-  const systemPrompt = `You are a creative lyric assistant. For the given lyric segment that has no problems, suggest creative enhancements. Focus on: mood improvements, alternative phrasings, rhyme enhancements, flow variations, emotional depth. Return JSON: { "suggestions": [{ "id": "s1", "type": "enhancement|alternative|rhyme|flow|mood", "text": "...", "description": "...", "confidence": 0.0-1.0 }] }`;
-
-  const prompt = `Current segment: ${segment.originalText}
-
-Other lyrics for context:
-${allSegments.map(s => s.originalText).join('\n')}
-
-Context: ${context}`;
+  const provider = getProvider();
+  const hasGeminiKey = hasApiKey();
+  
+  if (provider === ModelProvider.OLLAMA || !hasGeminiKey) {
+    try {
+      const systemPrompt = `You are a creative lyric assistant. Suggest enhancements. Return JSON: { "suggestions": [{ "id": "s1", "type": "enhancement|alternative|rhyme|flow|mood", "text": "...", "description": "..." }] }`;
+      const prompt = `Segment: ${segment.originalText}\n\nContext: ${context}`;
+      
+      const responseText = await callAI(prompt, systemPrompt);
+      const parsed = parseJSONResponse(responseText);
+      
+      return (parsed.suggestions || []).map((s: any, idx: number) => ({
+        id: s.id || `suggestion-${idx}`,
+        type: s.type || 'enhancement',
+        text: s.text,
+        description: s.description || '',
+        confidence: s.confidence || 0.6
+      }));
+    } catch (e) {
+      return [
+        { id: 's-1', type: 'enhancement', text: segment.originalText + ' 💫', description: 'Add emoji for emphasis', confidence: 0.5 },
+        { id: 's-2', type: 'alternative', text: segment.originalText.replace(/lyrics/gi, 'verses'), description: 'Alternative wording', confidence: 0.4 }
+      ];
+    }
+  }
+  
+  const systemPrompt = `You are a creative lyric assistant. Suggest enhancements. Return JSON: { "suggestions": [{ "id": "s1", "type": "enhancement|alternative|rhyme|flow|mood", "text": "...", "description": "..." }] }`;
+  const prompt = `Segment: ${segment.originalText}\n\nContext: ${context}`;
 
   try {
-    const responseText = await callGemini(prompt, systemPrompt);
+    const responseText = await callAI(prompt, systemPrompt);
     const parsed = parseJSONResponse(responseText);
     
     return (parsed.suggestions || []).map((s: any, idx: number) => ({
@@ -360,51 +534,51 @@ Context: ${context}`;
       type: s.type || 'enhancement',
       text: s.text,
       description: s.description || '',
-      confidence: s.confidence || Math.random() * 0.3 + 0.6
+      confidence: s.confidence || 0.6
     }));
   } catch (e) {
-    console.error('Smart suggestions error:', e);
     return [];
   }
 };
 
 export const suggestMetaTags = async (segments: LyricSegment[], context: string): Promise<string[]> => {
-  const lyricsText = segments.map(s => s.originalText).join('\n');
+  const provider = getProvider();
+  const hasGeminiKey = hasApiKey();
   
-  const systemPrompt = `You are a music producer expert. Analyze the lyrics structure and suggest appropriate meta tags (Intro, Verse, Pre-Chorus, Chorus, Hook, Bridge, Drop, Outro, Break, Ad-Lib, Harmony, Melody). Return JSON: { "metaTags": ["[Verse]", "[Chorus]", ...] }`;
-
+  if (provider === ModelProvider.OLLAMA || !hasGeminiKey) {
+    try {
+      const lyricsText = segments.map(s => s.originalText).join('\n');
+      const systemPrompt = `Analyze lyrics structure and suggest meta tags. Return JSON: { "metaTags": ["[Verse]", "[Chorus]", ...] }`;
+      const prompt = `Lyrics:\n${lyricsText}\n\nContext: ${context}`;
+      
+      const responseText = await callAI(prompt, systemPrompt);
+      const parsed = parseJSONResponse(responseText);
+      return parsed.metaTags || [];
+    } catch (e) {
+      const tags: string[] = [];
+      let hasMultipleLines = segments.length > 8;
+      
+      if (hasMultipleLines) {
+        tags.push('[Intro]', '[Verse 1]', '[Chorus]', '[Verse 2]', '[Chorus]', '[Bridge]', '[Outro]');
+      } else {
+        tags.push('[Verse]', '[Chorus]');
+      }
+      
+      return tags;
+    }
+  }
+  
+  const lyricsText = segments.map(s => s.originalText).join('\n');
+  const systemPrompt = `Analyze lyrics structure and suggest meta tags. Return JSON: { "metaTags": ["[Verse]", "[Chorus]", ...] }`;
   const prompt = `Lyrics:\n${lyricsText}\n\nContext: ${context}`;
 
   try {
-    const responseText = await callGemini(prompt, systemPrompt);
+    const responseText = await callAI(prompt, systemPrompt);
     const parsed = parseJSONResponse(responseText);
     return parsed.metaTags || [];
   } catch (e) {
-    console.error('Meta tags suggestion error:', e);
     return [];
   }
 };
-
-function getSystemPrompt(mode: AiMode, task: 'analyze' | 'regenerate' | 'finalize' | 'suggest' | 'metatags'): string {
-  const prompts = {
-    analyze: {
-      [AiMode.AUTO]: `You are an expert lyric analyst and music producer. Analyze the song lyrics and divide them into logical segments. Mark problematic segments (rhythm, rhyme issues) and suggest 2-3 fix variants. Always respond with valid JSON matching: { "mode": "string", "segments": [...] }`,
-      [AiMode.MODE_1]: `You are a genre adaptation expert. Analyze lyrics and adapt them to match the specified genre (rhythm, flow, syllable count). Always respond with valid JSON: { "mode": "MODE_1", "segments": [...] }`,
-      [AiMode.MODE_2]: `You are a style mimic expert. Rewrite lyrics in the style of a specific artist while preserving meaning. Always respond with valid JSON: { "mode": "MODE_2", "segments": [...] }`,
-      [AiMode.MODE_3]: `You are a music prompt generator. Focus on creating detailed, massive music prompts for AI music generators. Always respond with valid JSON: { "mode": "MODE_3", "segments": [...] }`,
-      [AiMode.MODE_4]: `You are a translator and lyric analyst. Provide artistic translation while preserving rhythm. Always respond with valid JSON: { "mode": "MODE_4", "segments": [...] }`,
-      [AiMode.MODE_5]: `You are an interactive editor. Make specific structural or mood changes as requested. Always respond with valid JSON: { "mode": "MODE_5", "segments": [...] }`,
-      [AiMode.MODE_6]: `You are a composition expert for acappella. Suggest musical composition that supports the vocal. Always respond with valid JSON: { "mode": "MODE_6", "segments": [...] }`
-    },
-    regenerate: `You are a lyric engineer. Suggest 3 new variants for this lyric segment. Each variant should focus on different aspect: Flow (rhythm), Rhyme (better rhymes), Meaning (better semantics). Always respond with valid JSON: { "variants": [{ "id": "s1", "text": "...", "type": "Flow|Rhyme|Meaning", "confidence": 0.0-1.0 }] }`,
-    finalize: `You are a music producer. Based on the lyrics, create a detailed music production description (genre, instruments, mood, tempo). Also suggest appropriate meta tags. Always respond with valid JSON: { "lyrics": "...", "musicDescription": "...", "confidence": 0.0-1.0, "metaTags": ["[Intro]", "[Verse]", ...] }`
-  };
-
-  if (task === 'regenerate' || task === 'finalize') {
-    return prompts[task];
-  }
-
-  return prompts.analyze[mode] || prompts.analyze[AiMode.AUTO];
-}
 
 export const clearCache = () => semanticCache.clear();

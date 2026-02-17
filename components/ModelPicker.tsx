@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { setApiKey, hasApiKey } from '../services/geminiService';
+import { setApiKey, hasApiKey, testApiKey, testOllama, setOllamaModel, isOllamaConnected } from '../services/geminiService';
 import { useToast } from '../contexts/ToastContext';
 
 type ModelStatus = 'not_loaded' | 'loading' | 'loaded' | 'error' | 'testing' | 'ready';
@@ -19,7 +19,15 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
   const { success, error: showError } = useToast();
 
   useEffect(() => {
-    if (hasApiKey()) {
+    const savedProvider = localStorage.getItem('ai_provider');
+    const savedModel = localStorage.getItem('ollama_model');
+    
+    if (savedProvider === 'ollama') {
+      setSelectedProvider('ollama');
+      setModelName(savedModel || 'qwen2.5:3b');
+      setModelStatus('ready');
+      setStatusMessage('✓ Ollama připravena');
+    } else if (hasApiKey()) {
       setModelName('gemini-2.0-flash-exp');
       setModelStatus('ready');
       setStatusMessage('✓ Gemini API připravena');
@@ -40,19 +48,25 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
     
     try {
       updateStatus('loading', 'Ověřuji Gemini API...');
+      
       setApiKey(apiKeyInput.trim());
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const isValid = await testApiKey();
       
-      setModelName('gemini-2.0-flash-exp');
-      setSelectedProvider('gemini');
-      updateStatus('ready', '✓ Gemini API připravena');
-      success('Gemini API úspěšně připojena!');
-      
-      localStorage.setItem('ai_provider', 'gemini');
+      if (isValid) {
+        setModelName('gemini-2.0-flash-exp');
+        setSelectedProvider('gemini');
+        updateStatus('ready', '✓ Gemini API připravena');
+        success('Gemini API úspěšně připojena!');
+        localStorage.setItem('ai_provider', 'gemini');
+      } else {
+        updateStatus('error', 'Neplatný API klíč');
+        showError('Neplatný API klíč. Zkontrolujte správnost.');
+      }
     } catch (error: any) {
+      console.error('Gemini connection error:', error);
       updateStatus('error', 'Chyba při připojování');
-      showError('Nepodařilo se připojit k Gemini API');
+      showError(`Nepodařilo se připojit: ${error.message}`);
     }
   };
 
@@ -60,17 +74,11 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
     try {
       updateStatus('loading', 'Ověřuji dostupnost Ollama...');
       
-      const response = await fetch('http://localhost:11434/api/tags', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const models = data.models || [];
-        const defaultModel = models.find((m: any) => m.name.includes('gemma')) || models[0];
-        
-        setModelName(defaultModel?.name || 'gemma (default)');
+      const isAvailable = await testOllama();
+      
+      if (isAvailable) {
+        const savedModel = localStorage.getItem('ollama_model');
+        setModelName(savedModel || 'qwen2.5:3b');
         setSelectedProvider('ollama');
         updateStatus('ready', '✓ Ollama připravena');
         success('Ollama úspěšně připojena!');
@@ -81,8 +89,19 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
     } catch (error: any) {
       console.error('Ollama connection error:', error);
       updateStatus('error', 'Ollama nedostupná');
-      showError('Ollama není dostupná. Ujistěte se, že běží příkaz "ollama serve"');
+      showError('Ollama není dostupná. Ujistěte se, že běží "ollama serve"');
     }
+  };
+
+  const handleDisconnect = () => {
+    localStorage.removeItem('gemini_api_key');
+    localStorage.removeItem('ai_provider');
+    setModelStatus('not_loaded');
+    setStatusMessage('Nastavení AI modelu');
+    setApiKeyInput('');
+    setSelectedProvider('gemini');
+    updateStatus('not_loaded', 'AI odpojeno');
+    success('AI odpojeno');
   };
 
   const getStatusColor = () => {
@@ -163,13 +182,29 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
                 />
               </div>
               
-              <button
-                onClick={handleConnectGemini}
-                disabled={modelStatus === 'loading'}
-                className="btn-primary w-full"
-              >
-                {modelStatus === 'loading' ? 'Připojuji...' : 'Připojit Gemini API'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleConnectGemini}
+                  disabled={modelStatus === 'loading'}
+                  className="btn-primary flex-1"
+                >
+                  {modelStatus === 'loading' ? 'Ověřuji...' : 'Připojit Gemini API'}
+                </button>
+                
+                {modelStatus === 'ready' && (
+                  <button
+                    onClick={handleDisconnect}
+                    className="btn-ghost text-error"
+                    title="Odpojit"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <p className="text-xs text-surface-500">
+                Získejte API key na: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" className="text-primary-400 hover:underline">aistudio.google.com</a>
+              </p>
             </div>
           )}
 
@@ -185,11 +220,11 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
                 disabled={modelStatus === 'loading'}
                 className="btn-primary w-full"
               >
-                {modelStatus === 'loading' ? 'Připojuji...' : 'Připojit k Ollama'}
+                {modelStatus === 'loading' ? 'Ověřuji...' : 'Připojit k Ollama'}
               </button>
               
               <p className="text-xs text-surface-500 text-center">
-                Ujistěte se, že běží příkaz 'ollama serve'
+                Ujistěte se, že běží 'ollama serve'
               </p>
             </div>
           )}
@@ -198,6 +233,13 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ onStatusChange }) => {
             <div className="flex items-center gap-2 text-sm text-success">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
               <span> Aktivní: {selectedProvider === 'gemini' ? 'Google Gemini API' : 'Lokální Ollama'}</span>
+            </div>
+          )}
+
+          {modelStatus === 'error' && (
+            <div className="flex items-center gap-2 text-sm text-error">
+              <span className="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+              <span> Chyba připojení - zkontrolujte API klíč</span>
             </div>
           )}
         </div>
