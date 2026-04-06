@@ -41,7 +41,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
   const [showOnlyProblems, setShowOnlyProblems] = useState(true);
   const [regeneratingLineId, setRegeneratingLineId] = useState<string | null>(null);
   const [showMobilePreview, setShowMobilePreview] = useState(false);
-  const { success, error: showError } = useToast();
+  const { success, warning, error: showError } = useToast();
   const lineRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const assembledLyrics = useMemo(() => assembleLyrics(lines), [lines]);
@@ -108,7 +108,11 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
             : line,
         ),
       );
-      success('Řádek má nové varianty.');
+      if (alternatives) {
+        success('Řádek má nové varianty.');
+      } else {
+        warning('AI nevrátila použitelné varianty. Můžeš nechat originál nebo zkusit regeneraci znovu.');
+      }
     } catch (error) {
       console.error('Regenerate failed:', error);
       showError('Nepodařilo se vygenerovat nové varianty.');

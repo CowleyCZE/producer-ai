@@ -18,6 +18,7 @@ const MAX_LINES = 30;
 const MAX_LINE_LENGTH_DELTA = 0.3;
 const MIN_VARIANT_LENGTH = 3;
 const KEYWORDS_TO_PRESERVE = ['panelák', 'makám', 'děti'];
+const GEMINI_ENV_API_KEY_DISABLED_KEY = 'gemini_env_api_key_disabled';
 
 export const AI_ANALYZE_LINE_LIMIT = MAX_LINES;
 
@@ -173,8 +174,38 @@ function getSessionStorageOrNull(): Storage | null {
   }
 }
 
+function getLocalStorageOrNull(): Storage | null {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+function isGeminiEnvApiKeyDisabled(): boolean {
+  return getLocalStorageOrNull()?.getItem(GEMINI_ENV_API_KEY_DISABLED_KEY) === '1';
+}
+
+function setGeminiEnvApiKeyDisabled(disabled: boolean): void {
+  const storage = getLocalStorageOrNull();
+  if (!storage) {
+    return;
+  }
+
+  if (disabled) {
+    storage.setItem(GEMINI_ENV_API_KEY_DISABLED_KEY, '1');
+    return;
+  }
+
+  storage.removeItem(GEMINI_ENV_API_KEY_DISABLED_KEY);
+}
+
 export function getProviderApiKey(provider: ModelProvider): string | null {
-  if (provider === ModelProvider.GEMINI && import.meta.env.VITE_GEMINI_API_KEY) {
+  if (
+    provider === ModelProvider.GEMINI
+    && import.meta.env.VITE_GEMINI_API_KEY
+    && !isGeminiEnvApiKeyDisabled()
+  ) {
     return import.meta.env.VITE_GEMINI_API_KEY;
   }
 
@@ -205,6 +236,7 @@ export function setProviderApiKey(provider: ModelProvider, apiKey: string): void
   volatileApiKeyCache.set(provider, apiKey);
   getSessionStorageOrNull()?.setItem(key, apiKey);
   if (provider === ModelProvider.GEMINI) {
+    setGeminiEnvApiKeyDisabled(false);
     genAI = new GoogleGenerativeAI(apiKey);
     genAIKey = apiKey;
   }
@@ -219,6 +251,7 @@ export function clearProviderApiKey(provider: ModelProvider): void {
   volatileApiKeyCache.delete(provider);
   getSessionStorageOrNull()?.removeItem(key);
   if (provider === ModelProvider.GEMINI) {
+    setGeminiEnvApiKeyDisabled(true);
     genAI = null;
     genAIKey = null;
   }
