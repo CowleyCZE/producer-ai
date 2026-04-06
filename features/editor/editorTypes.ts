@@ -1,4 +1,5 @@
 export type VariantType = 'balanced' | 'flow' | 'rhyme';
+export type LineSelection = VariantType | 'original';
 
 export interface VariantOption {
   id: string;
@@ -17,7 +18,7 @@ export interface EditableLine {
   original: string;
   needsFix: boolean;
   alternatives: LineAlternatives | null;
-  selectedOption: VariantType | null;
+  selectedOption: LineSelection | null;
 }
 
 export interface AnalysisResult {
@@ -69,6 +70,9 @@ export const ENERGY_OPTIONS: EnergyOption[] = [
 
 export enum ModelProvider {
   GEMINI = 'gemini',
+  OPENAI = 'openai',
+  OPENROUTER = 'openrouter',
+  GROQ = 'groq',
   OLLAMA = 'ollama',
   LOCAL = 'local',
 }
@@ -84,6 +88,18 @@ export const DEFAULT_MODELS: Record<ModelProvider, ModelConfig> = {
   [ModelProvider.GEMINI]: {
     provider: ModelProvider.GEMINI,
     modelName: 'gemini-2.0-flash-exp',
+  },
+  [ModelProvider.OPENAI]: {
+    provider: ModelProvider.OPENAI,
+    modelName: 'gpt-4.1-mini',
+  },
+  [ModelProvider.OPENROUTER]: {
+    provider: ModelProvider.OPENROUTER,
+    modelName: 'openai/gpt-4.1-mini',
+  },
+  [ModelProvider.GROQ]: {
+    provider: ModelProvider.GROQ,
+    modelName: 'llama-3.3-70b-versatile',
   },
   [ModelProvider.OLLAMA]: {
     provider: ModelProvider.OLLAMA,

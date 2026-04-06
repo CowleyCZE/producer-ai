@@ -21,7 +21,7 @@ describe('LyricsInputPanel', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Nejdřív připoj AI backend' })).toBeDisabled();
-    expect(screen.getByText(/Nejdřív nahoře připoj Gemini nebo Ollama/)).toBeInTheDocument();
+    expect(screen.getByText(/Nejdřív nahoře připoj některý AI backend/)).toBeInTheDocument();
   });
 
   it('shows a warning when the text is longer than the analysis limit', () => {

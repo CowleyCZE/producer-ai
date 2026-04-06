@@ -113,7 +113,7 @@ const LyricsInputPanel: React.FC<LyricsInputPanelProps> = ({
 
           {!modelReady ? (
             <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-              Nejdřív nahoře připoj Gemini nebo Ollama. Pak se odemkne analýza textu.
+              Nejdřív nahoře připoj některý AI backend. Pak se odemkne analýza textu.
             </div>
           ) : null}
 

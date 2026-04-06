@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { assembleLyrics, computeRhymeDensity, regenerateLine } from './lyricsAi';
+import { assembleLyrics, computeRhymeDensity, isAlternativeSelection, isLineResolved, regenerateLine, resolveLineText } from './lyricsAi';
 import { EditableLine, EnergyOption, StyleOption, VariantType } from './editorTypes';
 import { diffText } from './textDiff';
 import { useToast } from '../../shared/toast/ToastContext';
@@ -45,21 +45,18 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
   const lineRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const assembledLyrics = useMemo(() => assembleLyrics(lines), [lines]);
-  const selectedCount = useMemo(() => lines.filter((line) => line.selectedOption).length, [lines]);
+  const resolvedCount = useMemo(() => lines.filter((line) => line.needsFix && isLineResolved(line)).length, [lines]);
   const problemLineCount = useMemo(() => lines.filter((line) => line.needsFix).length, [lines]);
   const nextUnresolvedLineId = useMemo(
-    () => lines.find((line) => line.needsFix && !line.selectedOption)?.id ?? null,
+    () => lines.find((line) => line.needsFix && !isLineResolved(line))?.id ?? null,
     [lines],
   );
   const unresolvedProblemCount = useMemo(
-    () => lines.filter((line) => line.needsFix && !line.selectedOption).length,
+    () => lines.filter((line) => line.needsFix && !isLineResolved(line)).length,
     [lines],
   );
   const rhymeDensity = useMemo(
-    () =>
-      computeRhymeDensity(
-        lines.map((line) => (line.selectedOption && line.alternatives ? line.alternatives[line.selectedOption] : line.original)),
-      ),
+    () => computeRhymeDensity(lines.map((line) => resolveLineText(line))),
     [lines],
   );
   const rhymeDensityLabel = rhymeDensity >= 0.6 ? 'silná' : rhymeDensity >= 0.3 ? 'střední' : 'slabá';
@@ -87,7 +84,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
         line.id === lineId
           ? {
               ...line,
-              selectedOption: null,
+              selectedOption: 'original',
             }
           : line,
       ),
@@ -171,7 +168,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                   onChange={(event) => setShowOnlyProblems(event.target.checked)}
                   className="h-4 w-4 rounded border-surface-600 bg-surface-800"
                 />
-                Zobraz jen opravené řádky
+                Zobraz jen řádky k úpravě
               </label>
 
               <button onClick={onBack} className="btn-ghost rounded-xl px-4 py-2 text-sm">
@@ -188,8 +185,8 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
               <p className="mt-2 text-2xl font-black text-surface-100">{problemLineCount}</p>
             </div>
             <div className="rounded-2xl border border-surface-700 bg-surface-950/40 px-4 py-3">
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-surface-500">Vybrané varianty</p>
-              <p className="mt-2 text-2xl font-black text-surface-100">{selectedCount}</p>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-surface-500">Rozhodnuté řádky</p>
+              <p className="mt-2 text-2xl font-black text-surface-100">{resolvedCount}</p>
             </div>
             <div className="rounded-2xl border border-surface-700 bg-surface-950/40 px-4 py-3">
               <p className="text-xs font-black uppercase tracking-[0.22em] text-surface-500">Zbývá rozhodnout</p>
@@ -227,7 +224,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-surface-500">Průběžný výsledek</p>
-              <p className="mt-2 text-sm text-surface-300">{selectedCount} vybraných řádků z {lines.length}</p>
+              <p className="mt-2 text-sm text-surface-300">{resolvedCount} rozhodnutých řádků z {problemLineCount}</p>
             </div>
             <button
               onClick={() => setShowMobilePreview((current) => !current)}
@@ -252,10 +249,9 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
         <div className="space-y-4">
           {visibleLines.map((line) => {
             const isRegenerating = regeneratingLineId === line.id;
-            const selectedText = line.selectedOption && line.alternatives
-              ? line.alternatives[line.selectedOption]
-              : line.original;
+            const selectedText = resolveLineText(line);
             const originalIndex = lines.findIndex((entry) => entry.id === line.id);
+            const originalSelected = line.selectedOption === 'original';
 
             return (
               <article
@@ -330,10 +326,36 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
 
                     <button
                       onClick={() => handleResetLine(line.id)}
-                      className="btn-secondary rounded-xl px-4 py-2 text-sm"
+                      className={`rounded-xl px-4 py-2 text-sm ${
+                        originalSelected ? 'btn-primary' : 'btn-secondary'
+                      }`}
                     >
-                      Ponechat původní řádek
+                      {originalSelected ? 'Původní řádek ponechán' : 'Ponechat původní řádek'}
                     </button>
+                  </div>
+                ) : line.needsFix ? (
+                  <div className="mt-6 rounded-2xl border border-warning/30 bg-warning/10 p-4">
+                    <p className="text-sm font-semibold text-warning">Pro tenhle řádek teď nemám použitelnou variantu.</p>
+                    <p className="mt-2 text-sm leading-6 text-surface-300">
+                      AI vrátila nevalidní nebo duplicitní návrhy. Můžeš nechat originál, nebo zkusit generování znovu.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        onClick={() => handleRegenerate(line.id)}
+                        disabled={isRegenerating}
+                        className="btn-ghost rounded-xl px-3 py-2 text-sm"
+                      >
+                        {isRegenerating ? 'Generuji...' : 'Zkus znovu'}
+                      </button>
+                      <button
+                        onClick={() => handleResetLine(line.id)}
+                        className={`rounded-xl px-4 py-2 text-sm ${
+                          originalSelected ? 'btn-primary' : 'btn-secondary'
+                        }`}
+                      >
+                        {originalSelected ? 'Původní řádek ponechán' : 'Ponechat původní řádek'}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="mt-6 rounded-2xl border border-surface-700 bg-surface-900/40 px-4 py-3 text-sm text-surface-400">
@@ -343,6 +365,15 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
 
                 <div className="mt-6 rounded-2xl border border-surface-700 bg-surface-950/50 p-4">
                   <p className="text-xs font-black uppercase tracking-[0.22em] text-surface-500">Aktuální volba</p>
+                  {line.needsFix ? (
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-surface-500">
+                      {isAlternativeSelection(line.selectedOption)
+                        ? `Vybraná varianta: ${variantLabels[line.selectedOption]}`
+                        : originalSelected
+                          ? 'Ponechaný originál'
+                          : 'Bez rozhodnutí'}
+                    </p>
+                  ) : null}
                   {selectedText ? (
                     <div className="mt-3">
                       <DiffPreview original={line.original} next={selectedText} />
@@ -380,12 +411,12 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
 
       <div className="mobile-action-bar xl:hidden">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-black uppercase tracking-[0.2em] text-surface-500">Průběžný výsledek</p>
-            <p className="truncate text-sm font-semibold text-surface-200">
-              {selectedCount} vybráno, {unresolvedProblemCount} zbývá
-            </p>
-          </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-black uppercase tracking-[0.2em] text-surface-500">Průběžný výsledek</p>
+              <p className="truncate text-sm font-semibold text-surface-200">
+              {resolvedCount} rozhodnuto, {unresolvedProblemCount} zbývá
+              </p>
+            </div>
           <button
             onClick={() => setShowMobilePreview((current) => !current)}
             className="btn-secondary min-w-24 rounded-xl px-4 py-3 text-sm"

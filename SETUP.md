@@ -37,13 +37,20 @@ npm test
 
 V aplikaci je panel `AI Backend`, kde se provider připojuje a přepíná.
 
-### Google Gemini
+### Remote provideři
 
-1. Získej API key na `https://aistudio.google.com/app/apikey`
-2. Otevři panel `AI Backend`
-3. Vyber `Google Gemini`
-4. Vlož API key
-5. Klikni na `Připojit Gemini API`
+Podporovaní provideři:
+- Google Gemini
+- OpenAI
+- OpenRouter
+- Groq
+
+Postup:
+1. Otevři panel `AI Backend`
+2. Vyber provider
+3. Vlož jeho API key
+4. Volitelně uprav model
+5. Klikni na odpovídající tlačítko připojení
 
 ### Ollama
 
@@ -51,11 +58,14 @@ V aplikaci je panel `AI Backend`, kde se provider připojuje a přepíná.
 2. Spusť `ollama serve`
 3. Otevři panel `AI Backend`
 4. Vyber `Lokální Ollama`
-5. Klikni na `Připojit k Ollama`
+5. Volitelně uprav URL Ollama serveru
+6. Po načtení vyber model, který je v telefonu opravdu stažený
+7. Klikni na `Připojit k Ollama`
 
 Poznámka:
-- aplikace používá první vhodný dostupný model, typicky `qwen...`
-- připojený provider se ukládá do `localStorage`
+- při přepnutí na `Lokální Ollama` aplikace načte seznam dostupných modelů z lokální instance
+- připojený provider a model se ukládají do `localStorage`
+- remote API klíče se ukládají jen do aktuální relace aplikace
 
 ## Jak dnes funguje MVP flow
 

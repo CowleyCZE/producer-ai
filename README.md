@@ -21,7 +21,7 @@ Současný stav:
 - diff highlight změn proti originálu
 - regenerate pouze jednoho řádku
 - sticky preview a copy akce pro desktop i mobil
-- přepínatelný AI backend: Google Gemini nebo lokální Ollama
+- přepínatelný AI backend: Gemini, OpenAI, OpenRouter, Groq nebo lokální Ollama
 
 ## Co je hotové
 
@@ -61,7 +61,7 @@ Tyto věci nejsou součástí aktuálního releasu:
 - TypeScript
 - Vite
 - Tailwind CSS v4
-- Google Gemini / Ollama
+- Google Gemini / OpenAI / OpenRouter / Groq / Ollama
 - Capacitor Android
 
 ## Struktura repo
@@ -114,21 +114,32 @@ npm test
 
 ## AI backend
 
-### Google Gemini
+### Remote provideři
 
-1. Získej API key na `https://aistudio.google.com/app/apikey`
-2. Otevři panel `AI Backend`
-3. Zadej API key
-4. Potvrď `Připojit Gemini API`
+Podporované varianty:
+- Google Gemini
+- OpenAI
+- OpenRouter
+- Groq
+
+Postup:
+1. Otevři panel `AI Backend`
+2. Vyber provider
+3. Zadej jeho API key
+4. Volitelně uprav model
+5. Potvrď připojení
 
 ### Ollama
 
 1. Nainstaluj Ollama
 2. Spusť `ollama serve`
 3. V aplikaci přepni na `Lokální Ollama`
-4. Potvrď připojení
+4. Volitelně uprav URL Ollama serveru
+5. Po načtení seznamu vyber lokálně stažený model
+6. Potvrď připojení
 
-Appka si po připojení uloží provider lokálně.
+Appka si po připojení ukládá provider a model do `localStorage`.
+Remote API key se ukládá jen do aktuální relace aplikace.
 
 ## Android
 
