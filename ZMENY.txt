@@ -1,0 +1,633 @@
+Zapomeň na 90 % feature. Tohle je **ostrý MVP pro producer-ai**:
+
+---
+
+# 🎯 **CORE IDEA (jedna věta)**
+
+👉 „Vlož text → dostaneš lepší verzi, která má flow a rýmy“
+
+Nic víc. To je celý produkt.
+
+---
+
+# 🖥️ **UI – jednoduchý jak kladivo**
+
+## Layout (1 obrazovka, žádný chaos)
+
+```
+--------------------------------------------------
+|  PRODUCER.AI                                  |
+--------------------------------------------------
+|  [ VLOŽ SVŮJ TEXT...                         ] |
+|                                               |
+|  (textarea – velkej, dominantní)              |
+|                                               |
+--------------------------------------------------
+|  Styl: [Boombap ▼]  Energie: [Střední ▼]      |
+--------------------------------------------------
+|         [ 🔥 Vylepšit text ]                  |
+--------------------------------------------------
+
+↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+--------------------------------------------------
+|  VÝSLEDEK                                     |
+--------------------------------------------------
+|  Verze A (Balanced)                           |
+|  Verze B (Agresivní flow)                     |
+|  Verze C (Lepší rýmy)                         |
+--------------------------------------------------
+```
+
+---
+
+## ❌ Co TAM NENÍ:
+
+* žádný BPM analyzér
+* žádný beat grid
+* žádných 6 módů
+* žádný advanced menu
+
+👉 tohle všechno tě zabije v začátku
+
+---
+
+# 🔄 **FLOW uživatele (kritický)**
+
+## 1. Otevře appku
+
+* hned vidí text box
+* žádný onboarding, žádný kecy
+
+## 2. Vloží text
+
+např:
+
+> Makám celej den, hlava plná stresu...
+
+## 3. Klikne:
+
+👉 **„Vylepšit text“**
+
+## 4. Dostane výsledek:
+
+* 3 varianty
+* každá jiný styl
+
+## 5. Klikne:
+
+* „Použít“
+* nebo „Zkus znovu“
+
+HOTOVO.
+
+👉 celý flow max 10 sekund
+
+---
+
+# ⚙️ **Funkce (jen to, co musí být)**
+
+## 🔥 1. Core engine
+
+* input: text
+* output:
+
+  * opravený rytmus
+  * lepší rýmy
+  * zachovaný význam
+
+---
+
+## 🔥 2. 3 varianty výstupu
+
+### A – Balanced
+
+* trochu všechno
+
+### B – Flow
+
+* lepší rytmus, tvrdší delivery
+
+### C – Rýmy
+
+* víc punchlines
+
+---
+
+## 🔥 3. Styl (dropdown – jednoduchý)
+
+* Boombap
+* Trap
+* Melodic
+
+👉 jen jako hint pro AI, nic víc
+
+---
+
+## 🔥 4. Copy button
+
+* copy text
+* konec
+
+---
+
+# 🧠 **Jak to má přemýšlet (AI logika)**
+
+Prompt styl:
+
+* zachovej význam
+* oprav slabý rýmy
+* zlepši flow (slabiky, rytmus)
+* nepoužívej nesmyslný slova jen kvůli rýmu
+* drž češtinu přirozenou
+
+👉 přesně to, co jsi chtěl dřív
+
+---
+
+# 💣 **Killer detail (tohle rozhoduje)**
+
+## Zvýrazni změny
+
+Např:
+
+**Původní:**
+
+> Makám celej den, hlava plná stresu
+
+**Nový:**
+
+> Makám celej den, v hlavě tlak a stres
+
+👉 tučně zvýrazni změněný části
+
+Tohle dělá:
+👉 „wow efekt“
+
+---
+
+# 📱 **Mobilní verze (důležitý!)**
+
+* textarea přes celej screen
+* button dole (thumb friendly)
+* výsledky jako swipe karty
+
+👉 rappeři to budou používat na mobilu, ne na PC
+
+---
+
+# 🚀 **Verze 1.1 (až po MVP)**
+
+Teprve pak přidej:
+
+* historie textů
+* export pro Suno
+* „vysvětli proč to změnil“
+* jednoduchý rýmovač
+
+---
+
+# 💰 **Monetizace hned od začátku**
+
+* zdarma:
+
+  * 3 použití denně
+
+* PRO:
+
+  * neomezeně
+  * lepší model
+
+👉 jednoduchý, funkční
+
+---
+
+# 🧨 Real talk závěr
+
+Teď máš:
+👉 komplexní nástroj, co nikdo neotevře
+
+Potřebuješ:
+👉 jednoduchý nástroj, co lidi spamujou každej den
+
+---
+
+# ⚡ Jedna věta na zapamatování
+
+👉 **„Jedno tlačítko, jeden problém, jedno řešení.“**
+
+---
+
+
+---
+
+# 🧠 **CORE PRINCIP**
+
+👉 Nech AI opravit text **po segmentech (řádcích)**
+👉 Pro KAŽDÝ problémový řádek vrať **3 varianty**
+
+---
+
+# 🔥 **AI PROMPT (production-ready)**
+
+Použij jako **system + user kombinaci**
+
+---
+
+## 🧩 SYSTEM PROMPT
+
+```
+Jsi profesionální český textař a rapový editor.
+
+Tvůj úkol:
+- analyzovat text po jednotlivých řádcích
+- identifikovat problematické části (slabé rýmy, špatný rytmus, klišé, nepřirozené formulace)
+- NEPŘEPISUJ celý text
+- upravuj pouze problematické řádky
+
+Pro každý problematický řádek:
+- vytvoř přesně 3 alternativy:
+  1. balanced (vyvážená úprava)
+  2. flow (lepší rytmus a tempo)
+  3. rhyme (lepší rýmy a punchlines)
+
+Pravidla:
+- zachovej význam původního textu
+- nepoužívej nesmyslná slova jen kvůli rýmu
+- zachovej přirozenou češtinu
+- respektuj styl (rap / hip-hop)
+- drž podobnou délku řádku (kvůli flow)
+
+Výstup musí být ve STRICTNÍM JSON formátu:
+{
+  "lines": [
+    {
+      "original": "...",
+      "needs_fix": true,
+      "alternatives": {
+        "balanced": "...",
+        "flow": "...",
+        "rhyme": "..."
+      }
+    }
+  ]
+}
+
+Pokud řádek nepotřebuje úpravu:
+- "needs_fix": false
+- "alternatives": null
+```
+
+---
+
+## 👤 USER PROMPT (dynamický)
+
+```
+Text:
+{{USER_TEXT}}
+
+Styl:
+{{STYLE}} (např. boombap / trap / melodic)
+
+Instrukce:
+Zaměř se hlavně na:
+- rytmus (flow)
+- kvalitu rýmů
+- přirozenost textu
+```
+
+---
+
+# ⚙️ **BACKEND LOGIKA (klíčová část)**
+
+Tady většina lidí selže. Ty to udělej takhle:
+
+---
+
+## 1. Rozdělení textu
+
+```js
+const lines = text.split("\n").filter(l => l.trim() !== "");
+```
+
+👉 pracuj po řádcích, ne celý blok
+
+---
+
+## 2. Volání AI (jedno, ne 100x)
+
+👉 NEvolat AI pro každý řádek zvlášť
+👉 Pošli celý text najednou (kvůli kontextu)
+
+---
+
+## 3. Validace odpovědi
+
+AI občas kecá → musíš to hlídat:
+
+```js
+if (!response.lines) throw new Error("Invalid AI response");
+```
+
+* fallback:
+
+- když chybí alternatives → nastav původní text
+
+---
+
+## 4. Mapování do UI
+
+Výstup transformuj na něco jako:
+
+```js
+[
+  {
+    original: "Makám celej den...",
+    needsFix: true,
+    options: [
+      { type: "balanced", text: "Makám celej den, v hlavě tlak a stres" },
+      { type: "flow", text: "Makám celej den, tlak v hlavě, stres" },
+      { type: "rhyme", text: "Makám celej den, stres mě tlačí ven" }
+    ]
+  }
+]
+```
+
+---
+
+## 5. Skládání výsledného textu
+
+Uživatel kliká → ty skládáš:
+
+```js
+const finalText = lines.map(line => {
+  if (!line.needsFix) return line.original;
+  return line.selectedOption || line.original;
+}).join("\n");
+```
+
+---
+
+# 🎛️ **UI LOGIKA (tohle dělá “wow efekt”)**
+
+## Zobrazení:
+
+```
+Makám celej den, hlava plná stresu
+   ↓ opravit
+
+[ A ] Makám celej den, v hlavě tlak a stres
+[ B ] Makám celej den, tlak v hlavě, stres
+[ C ] Makám celej den, stres mě tlačí ven
+```
+
+---
+
+## UX detaily (důležitý jak prase):
+
+### ✅ Klik = okamžitá změna řádku
+
+* žádný potvrzování
+
+### ✅ Hover → zvýraznění změn
+
+* diff highlight (bonus)
+
+### ✅ Toggle:
+
+* „zobraz jen opravené řádky“
+
+---
+
+# 💣 **Edge cases (realita)**
+
+## 1. AI označí všechno jako OK
+
+👉 fallback:
+
+* vynutit min. 1–2 opravy
+
+---
+
+## 2. AI vrátí blbosti
+
+👉 filtr:
+
+* délka řádku ±30 %
+* zakázat divný znaky
+
+---
+
+## 3. Dlouhý text
+
+👉 limit:
+
+* max 30 řádků na request
+
+---
+
+# 🚀 **Upgrade (po MVP)**
+
+Až tohle poběží:
+
+* 🔥 „Regenerate only this line“
+* 🔥 „Mix varianty“ (A z jednoho, B z druhýho)
+* 🔥 „Explain why“ (pro geeky)
+
+---
+
+# 🧨 Shrnutí
+
+Tohle je tvoje výhoda oproti konkurenci:
+
+👉 **Nejen generuješ text → dáváš kontrolu nad každým řádkem**
+
+Tohle:
+
+* učí uživatele psát
+* drží ho v appce
+* dává pocit „já to vytvořil“
+
+---
+
+Tady jde o jemnou práci – čeština je na rýmy a rytmus záludná a defaultní AI to často kazí (láme slova, dává trapný rýmy typu *den–sen–ven* pořád dokola).
+Dostaneš **tuning, který tohle řeší natvrdo**.
+
+---
+
+# 🔥 **UPGRADED PROMPT TUNING (čeština, rýmy, slabiky)**
+
+Použij to jako rozšíření toho předchozího system promptu.
+
+---
+
+## 🧠 **RYTMUS + SLABIKY (zásadní část)**
+
+```id="cz_rhythm"
+RYTMUS A SLABIKY:
+
+- Každý řádek musí mít podobný počet slabik jako originál (±2 slabiky max)
+- Zachovej přirozený důraz ve větě (čeština má přízvuk na první slabice slova)
+- Vyhýbej se kostrbatým konstrukcím, které by rapper nevyslovil plynule
+- Nepřidávej zbytečná slova jen kvůli délce (např. "prostě", "jakoby", pokud nedávají smysl)
+
+- Flow musí být "rapovatelný":
+  - krátká slova = rychlost
+  - delší slova = zpomalení → používej vědomě
+
+- Pokud je řádek rytmicky špatný:
+  → uprav strukturu věty, ne jen slova
+```
+
+---
+
+## 🎤 **RÝMY (tohle dělá rozdíl)**
+
+```id="cz_rhymes"
+RÝMY:
+
+- Preferuj víceslabičné rýmy (např. "hlava bolí" / "pravda bolí")
+- Vyhýbej se základním rýmům:
+  den / sen / ven / jen / ten → používej minimálně
+
+- Používej:
+  - interní rýmy (uvnitř řádku)
+  - multisyllabic rhymes (více slabik)
+  - asonanci (podobnost zvuků)
+  - konsonanci (opakování souhlásek)
+
+- Rým nemusí být perfektní, ale musí znít dobře při čtení nahlas
+
+- Pokud rým působí nuceně:
+  → radši ho zjemni než zkaz význam
+
+ŠPATNĚ:
+"Makám celej den, už nemám ani sen"
+
+DOBŘE:
+"Makám celej den, hlava tlačí, ztrácím směr"
+```
+
+---
+
+## 🇨🇿 **PŘIROZENÁ ČEŠTINA (AI tady často selže)**
+
+```id="cz_natural"
+PŘIROZENOST:
+
+- Piš jako reálný člověk, ne jako překladač
+- Nepoužívej knižní nebo zastaralé výrazy
+- Nepřekládej doslovně anglické fráze
+- Vyhýbej se slovům, která se v rapu nepoužívají
+
+- Pokud věta zní "AI generovaně":
+  → zjednoduš ji
+
+TEST:
+Každý řádek musí jít říct nahlas bez zakopnutí
+```
+
+---
+
+## 🧨 **ANTI-BULLSHIT FILTR (extrémně důležitý)**
+
+```id="cz_filter"
+ZAKÁZÁNO:
+
+- Nesmyslné výrazy jen kvůli rýmu
+- Opakování stejných rýmů v celém textu
+- Umělé natahování slov (např. "jeeeeen", "dneeees")
+- Náhodná anglická slova bez důvodu
+- Generické fráze typu:
+  "žiju svůj sen", "jdu si za svým", "nikdo mě nezastaví"
+
+Pokud nemáš kvalitní rým:
+→ radši použij nerýmovaný, ale silný řádek
+```
+
+---
+
+## 🎯 **VÝSTUPNÍ KVALITA (tvůj tajnej hack)**
+
+```id="cz_quality"
+KVALITA:
+
+Každá alternativa musí být:
+- použitelná v reálné skladbě
+- rytmicky konzistentní
+- významově smysluplná
+
+Rozdíly mezi variantami:
+- balanced → čistý upgrade
+- flow → rytmus a energie
+- rhyme → silnější rýmování
+
+Nesmí se lišit jen jedním slovem → musí to být reálná alternativa
+```
+
+---
+
+# ⚙️ **BONUS: MINI POST-PROCESS (backend hack)**
+
+Tohle ti zvedne kvalitu o level:
+
+## 1. Kontrola slabik (rychlá heuristika)
+
+```js id="syllables"
+function countSyllables(line) {
+  return line.match(/[aeiouyáéíóúůýě]/gi)?.length || 0;
+}
+```
+
+👉 porovnej original vs AI:
+
+* pokud rozdíl > 3 → discard variantu
+
+---
+
+## 2. Anti-repeat filtr
+
+```js id="repeat"
+function hasTooManyRepeats(text) {
+  const words = text.toLowerCase().split(" ");
+  const freq = {};
+  words.forEach(w => freq[w] = (freq[w] || 0) + 1);
+  return Object.values(freq).some(v => v > 3);
+}
+```
+
+---
+
+## 3. Blacklist rýmů
+
+```js id="blacklist"
+const weakRhymes = ["den", "sen", "ven", "ten", "jen"];
+```
+
+👉 pokud se opakují často → penalizuj
+
+---
+
+# 🧠 Realita (důležitý)
+
+Bez tohohle tuningu:
+👉 AI generuje “školní rap”
+
+S tímhle:
+👉 začne to znít jako něco, co by někdo fakt vydal
+
+---
+
+# ⚡ Největší edge co máš
+
+👉 Čeština + rap + technickej přístup
+
+Tohle:
+
+* většina AI toolů neumí
+* ty to můžeš trefit přesně
+
+---
+
+
+

@@ -1,0 +1,299 @@
+Rozdělím to na vrstvy, ať víš, co je MUST a co je NEXT LEVEL.
+
+---
+
+# 🔥 **CORE (musí být, jinak to nebude fungovat dobře)**
+
+## 1. 🎯 Scoring systém (0–100 pro každý řádek)
+
+👉 AI + backend hodnotí kvalitu
+
+### Co hodnotit:
+
+* rytmus (flow)
+* rýmy
+* přirozenost
+* síla sdělení
+
+```js
+score = 
+  rhythm * 0.3 +
+  rhyme * 0.3 +
+  natural * 0.2 +
+  impact * 0.2;
+```
+
+👉 výstup:
+
+```json
+{
+  "score": 72,
+  "issues": ["slabý rým", "neplynulý rytmus"]
+}
+```
+
+---
+
+## 2. 🧠 Detekce problémových řádků (lepší než jen AI guess)
+
+👉 kombinace:
+
+* AI
+* heuristika
+
+### pravidla:
+
+* moc krátký / dlouhý řádek
+* opakující se slova
+* slabý rýmy (blacklist)
+
+---
+
+## 3. 🔄 Regenerate pouze jeden řádek
+
+👉 absolutní must-have
+
+UX:
+
+* klik → „zkus znovu“
+* AI vrátí nové 3 varianty
+
+---
+
+## 4. 🧩 Diff systém (co se změnilo)
+
+👉 zvýraznění změn
+
+Bez toho:
+
+* uživatel neví, co AI udělala
+
+---
+
+## 5. 💾 Stav projektu (lokální save)
+
+* uložit rozepsaný text
+* uložit vybrané varianty
+
+---
+
+# ⚙️ **QUALITY LAYER (tohle tě odliší)**
+
+## 6. 🎤 Rhyme density analyzer
+
+👉 kolik rýmů má text
+
+```js
+rhymeDensity = rhymedLines / totalLines;
+```
+
+👉 ukázat:
+
+* slabý / střední / silný
+
+---
+
+## 7. 🧮 Syllable consistency check
+
+👉 jestli mají řádky podobnou délku
+
+* highlight:
+
+  * „tenhle řádek ti rozbije flow“
+
+---
+
+## 8. 🧠 Kontextový paměťový systém
+
+👉 AI ví:
+
+* o čem je track
+* jaký má vibe
+
+Bez toho:
+👉 každá úprava = jiný styl (chaos)
+
+---
+
+## 9. 🎯 Keyword preservation
+
+👉 důležitý slova zůstanou
+
+např:
+
+* „panelák“
+* „makám“
+* „děti“
+
+---
+
+## 10. 🧪 Anti-AI detector (interní)
+
+👉 detekce:
+
+* generický fráze
+* klišé
+
+---
+
+# 🚀 **USER EXPERIENCE (tohle rozhoduje, jestli to lidi používají)**
+
+## 11. ⚡ Instant preview
+
+👉 klik → text se hned změní
+
+---
+
+## 12. 🎛️ Variant comparison mode
+
+👉 zobraz:
+
+```plaintext
+Original | A | B | C
+```
+
+---
+
+## 13. 🧠 „Proč to AI změnila“
+
+👉 krátký vysvětlení:
+
+> „lepší rytmus + silnější rým“
+
+---
+
+## 14. 🔁 Undo / redo
+
+👉 lidi experimentují → potřebují se vracet
+
+---
+
+## 15. 📱 Mobil UX (kritický)
+
+* swipe mezi variantami
+* tap = apply
+
+---
+
+# 💰 **PRODUCT / BUSINESS LAYER**
+
+## 16. 🔐 Rate limit
+
+* free: 3–5 úprav denně
+
+---
+
+## 17. ⭐ PRO režim
+
+* lepší model
+* víc variant (např. 5 místo 3)
+
+---
+
+## 18. 📊 Usage tracking
+
+👉 co lidi používají:
+
+* flow vs rhyme
+* délka textů
+
+---
+
+# 🧠 **ADVANCED (tohle z toho udělá „wow tool“)**
+
+*(dělej až později)*
+
+---
+
+## 19. 🎚️ Flow intensity slider
+
+👉 “chci víc agresivní flow”
+
+---
+
+## 20. 🎤 Rap persona mode
+
+👉 styl:
+
+* tvrdý
+* melancholický
+* storytelling
+
+---
+
+## 21. 🧬 Learning systém
+
+👉 appka se učí styl uživatele
+
+---
+
+## 22. 🎧 Beat sync (future)
+
+👉 napojení na BPM
+
+---
+
+## 23. 🤖 Auto-complete dalšího řádku
+
+👉 AI navrhne pokračování
+
+---
+
+## 24. 🧠 Hook generator
+
+👉 generuje refrény
+
+---
+
+# 💀 **Co NEDĚLAT (zabije tě to)**
+
+* ❌ 10 různých AI módů
+* ❌ složitý menu
+* ❌ přepínače, co nikdo nechápe
+* ❌ “power user features” hned na začátku
+
+---
+
+# 🧨 PRIORITA (co dělat v pořadí)
+
+## 🥇 MVP
+
+1. AI opravy + 3 varianty
+2. výběr po řádcích
+3. scoring (základní)
+4. regenerate line
+
+---
+
+## 🥈 Vylepšení
+
+5. diff highlight
+6. syllable check
+7. rhyme density
+
+---
+
+## 🥉 Pokročilé
+
+8. persona
+9. learning
+10. beat sync
+
+---
+
+# ⚡ Real talk závěr
+
+👉 Největší rozdíl nebude v AI
+👉 ale v tom, jak **uživatel ovládá výsledek**
+
+---
+
+# 🧠 Jedna myšlenka, co si zapamatuj
+
+👉 „Nech AI psát, ale člověka řídit.“
+
+---
+
+Pokud chceš další level:
+👉 můžu ti navrhnout **konkrétní scoring algoritmus + JSON strukturu + UI bar (0–100)**, aby to působilo jak profi DAW pro texty.
+

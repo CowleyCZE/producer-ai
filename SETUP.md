@@ -1,146 +1,128 @@
-# Producer.ai - Spuštění aplikace
+# Producer.ai MVP - Setup
+
+Tento projekt je úzké MVP pro úpravu rapových textů po řádcích.
 
 ## Požadavky
 
-- **Node.js** verze 18+
-- **npm** nebo **yarn**
-- **Git**
+- Node.js 18+
+- npm
+- Git
 
----
+Pro Android build navíc:
+- Java 21
+- Android SDK
 
-## ⚡ Rychlý start
+## Web rychlý start
 
 ```bash
-# 1. Klonování repozitáře
 git clone https://github.com/CowleyCZE/producer-ai.git
 cd producer-ai
-
-# 2. Instalace závislostí
 npm install
-
-# 3. Spuštění vývojového serveru
 npm run dev
 ```
 
-Aplikace bude dostupná na: `http://localhost:3000`
+Vývojový server pak poběží na lokální Vite adrese, typicky:
+- `http://localhost:5173`
 
----
+## Web příkazy
 
-## 📋 Další příkazy
-
-### Vývoj
 ```bash
-npm run dev          # Spustit vývojový server (doporučeno)
-npm run build        # Build produkční verze
-npm run preview     # Náhled produkční verze
-```
-
-### Testy
-```bash
-npm test           # Spustit všechny testy (49 testů)
-npm run test:watch # Spustit testy v watch módu
-```
-
-### PWA / Offline
-```bash
-# PWA funguje automaticky po buildu
+npm run dev
 npm run build
-# Výsledek je v /dist složce
+npm run preview
+npm test
 ```
 
----
+## AI backend
 
-## 🔧 Konfigurace API
+### Google Gemini
 
-### Google Gemini API
+1. Získej API key na `https://aistudio.google.com/app/apikey`
+2. Otevři v aplikaci panel AI provideru
+3. Zadej API key
+4. Potvrď `Připojit Gemini API`
 
-1. Získejte API klíč z: https://aistudio.google.com/app/apikey
-2. V aplikaci klikněte na 🌐 Google Gemini
-3. Vložte API klíč
-4. Klikněte na "Připojit Gemini API"
+### Ollama
 
-### Ollama (lokální)
+1. Nainstaluj Ollama
+2. Spusť `ollama serve`
+3. V aplikaci přepni na `Lokální Ollama`
+4. Potvrď připojení
 
-1. Nainstalujte Ollama: https://ollama.ai
-2. Spusťte: `ollama serve`
-3. V aplikaci klikněte na 💻 Lokální Ollama
-4. Klikněte na "Připojit k Ollama"
+## Android workflow
 
----
+Android vrstva je tenký Capacitor shell nad webovým MVP.
 
-## 📱 Mobilní použití
+Aktuální Android identita:
+- `appName`: `Producer.ai`
+- `appId`: `com.producer.ai.app`
+- plugin: `LyricsEditorPlugin`
+- service: `LyricsEditorService`
+- theme: `ProducerMvpTheme`
 
-### Termux (Android)
+Poznámka:
+- `appId` zůstává beze změny schválně, aby se nerozbila identita aplikace
+
+### Android build
+
+```bash
+npm install
+npm run build
+npx cap sync android
+./android/gradlew -p android assembleDebug
+```
+
+Výstup:
+- `android/app/build/outputs/apk/debug/app-debug.apk`
+
+### Android shell sync po změně webu
+
+```bash
+npm run build
+npx cap sync android
+```
+
+## Termux / mobilní lokální běh
+
 ```bash
 pkg update
-pkg install nodejs
+pkg install nodejs git
 git clone https://github.com/CowleyCZE/producer-ai.git
 cd producer-ai
 npm install
 npm run dev -- --host 0.0.0.0
 ```
 
-### PWA instalace
-1. Otevřete aplikaci v Chrome/Edge
-2. Klikněte na "Instalovat aplikaci"
-3. Aplikace bude dostupná offline
+## PWA instalace
 
----
+1. Otevři aplikaci v Chrome nebo Edge
+2. Zvol instalaci aplikace
+3. Aplikace poběží jako PWA shell
 
-## 🐛 Řešení problémů
+## Časté problémy
 
-### "Module not found"
+### Chybí moduly
+
 ```bash
 npm install
+```
+
+### Potřebuji čistý web build
+
+```bash
+rm -rf dist
+npm run build
+```
+
+### Android shell nevidí nové web změny
+
+```bash
+npm run build
+npx cap sync android
 ```
 
 ### Port je obsazený
+
 ```bash
 npm run dev -- --port 3001
 ```
-
-### Cache problémy
-```bash
-rm -rf node_modules
-npm install
-```
-
-### GitHub push (pro vývojáře)
-```bash
-git config user.email "your@email.com"
-git config user.name "Your Name"
-git add .
-git commit -m "your message"
-git push origin main
-```
-
----
-
-## 📦 Struktura příkazů
-
-| Příkaz | Popis |
-|--------|-------|
-| `npm install` | Nainstalovat závislosti |
-| `npm run dev` | Spustit vývojový server |
-| `npm run build` | Build produkce |
-| `npm run preview` | Náhled produkce |
-| `npm test` | Spustit testy |
-
----
-
-## 🌐 Live Demo
-
-Aplikace je dostupná po buildu v `dist/` složce.
-Pro deployment doporučujeme Vercel, Netlify nebo GitHub Pages.
-
-```bash
-# Příklad deploy na Vercel
-npm i -g vercel
-vercel
-```
-
----
-
-## 📞 Podpora
-
-- GitHub Issues: https://github.com/CowleyCZE/producer-ai/issues

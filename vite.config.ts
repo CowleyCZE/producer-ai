@@ -16,9 +16,9 @@ export default defineConfig(({ mode }) => {
           registerType: 'autoUpdate',
           includeAssets: ['favicon.svg', 'icon-192.svg', 'icon-512.svg'],
           manifest: {
-            name: 'Producer.ai - Lyric Architect',
+            name: 'Producer.ai',
             short_name: 'Producer.ai',
-            description: 'AI-powered lyric analysis and music production tool',
+            description: 'Vloz text, vyber lepsi radky a zkopiruj vysledek.',
             theme_color: '#8b5cf6',
             background_color: '#0f172a',
             display: 'standalone',
