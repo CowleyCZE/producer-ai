@@ -5,6 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const skipPwa = env.SKIP_PWA === 'true';
     return {
       server: {
         port: 3000,
@@ -13,6 +14,7 @@ export default defineConfig(({ mode }) => {
       plugins: [
         react(),
         VitePWA({
+          disable: skipPwa,
           registerType: 'autoUpdate',
           includeAssets: ['favicon.svg', 'icon-192.svg', 'icon-512.svg'],
           manifest: {

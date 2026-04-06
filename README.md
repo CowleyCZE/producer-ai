@@ -166,6 +166,20 @@ Výstup debug APK:
 
 ## Směr produktu
 
+## Jak sbírat chyby AI backendu
+
+1. Na zařízení nebo v Termuxu spusť aplikaci přes `npm run dev` a otevři vývojový režim (Chrome Remote Debugging nebo logcat).
+2. Sleduj `console.error` zprávy obsahující `testOllama failed` nebo `testGeminiKey failed` – vypisují přesnou chybu fetch (timeout, 404, CORS apod.).
+3. Pro Android shell spusť `adb logcat *:S Capacitor:V` / `adb logcat *:S DevTools:V` a vyhledej řádky se `logHeuristic` nebo `Ollama test failed`.
+4. Pokud se ti log nezobrazuje, ujisti se, že v `AiProviderPanel` není uložen nevalidní klíč (vymaž `localStorage` / `AsyncStorage`).
+5. Po důkladné analýze zkontroluj, že server Ollama běží na `http://localhost:11434` a odpovídá `/api/tags`; případně zvýš `testOllama` timeout nebo uprav adresu přes `OLLAMA_BASE_URL`.
+
+## Když build selže kvůli service workeru
+
+1. Spusť `SKIP_PWA=true npm run build`, aby se vynechalo generování `service-worker.js` (výsledkem je jen čistá webová verze bez PWA).  
+2. Pokud chceš vypnout PWA trvale v Termuxu, nastav `SKIP_PWA=1` do `.env` nebo přímo před `npm run build`.  
+3. Pro produkční build na serveru vrať `SKIP_PWA` zpět na `false`, jinak se service worker nebude vytvářet.
+
 Cíl není vracet do aplikace původní široký toolset.
 
 Cíl je:
