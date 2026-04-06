@@ -62,8 +62,9 @@ class LyricsEditorService(private val context: Context) {
 
     fun loadModel(path: String): Result<Unit> = runCatching {
         val uri = Uri.parse(path)
+        val isContentUriPath = path.startsWith("content://")
         val modelFile = when {
-            path.startsWith("content://") -> copyContentUriToCache(uri)
+            isContentUriPath -> copyContentUriToCache(uri)
             path.startsWith("file://") -> File(uri.path ?: path)
             else -> File(path)
         }
@@ -71,7 +72,10 @@ class LyricsEditorService(private val context: Context) {
         if (!modelFile.exists()) {
             throw IllegalArgumentException("Model file not found at: $modelFile")
         }
-        if (!modelFile.name.lowercase(Locale.ROOT).endsWith(".tflite")) {
+        if (modelFile.length() == 0L) {
+            throw IllegalArgumentException("Model file is empty: $modelFile")
+        }
+        if (!isSupportedModelFile(modelFile, uri.takeIf { isContentUriPath })) {
             throw IllegalArgumentException("Unsupported model format. Expected .tflite file.")
         }
 
@@ -90,6 +94,25 @@ class LyricsEditorService(private val context: Context) {
             }
         }
         return outputFile
+    }
+
+    private fun isSupportedModelFile(modelFile: File, sourceUri: Uri?): Boolean {
+        val extension = modelFile.extension.lowercase(Locale.ROOT)
+        if (extension == "tflite") {
+            return true
+        }
+
+        if (sourceUri == null) {
+            return false
+        }
+
+        val mimeType = context.contentResolver.getType(sourceUri)?.lowercase(Locale.ROOT).orEmpty()
+        if (mimeType.contains("tflite")) {
+            return true
+        }
+
+        // Some document providers omit original extension/type for binary files.
+        return extension.isEmpty() || extension == "bin"
     }
 
     suspend fun analyzeLyrics(text: String, context: String, selectedMode: String): Result<EditorAnalysisResult> = runCatching {
