@@ -1,123 +1,133 @@
-# Producer.ai - Lyric Architect & Creative Agent
+# Producer.ai
 
-**Producer.ai** je pokročilá webová aplikace poháněná umělou inteligencí (Google Gemini), která slouží jako virtuální hudební producent a textař. Je navržena speciálně pro tvůrce používající AI generátory hudby (jako Suno v5, Udio) nebo pro muzikanty hledající vylepšení svých textů.
+`Producer.ai` je jednoduché MVP pro úpravu rapových textů v češtině.
 
-Aplikace analyzuje texty z hlediska rytmu, sémantiky a emocí, navrhuje vylepšení a připravuje finální výstup včetně profesionálních Meta Tagů pro generování zvuku.
+Základní flow je záměrně úzké:
+- vložíš text
+- zvolíš styl a energii
+- AI vytipuje problémové řádky
+- pro každý problémový řádek vrátí 3 varianty: `balanced`, `flow`, `rhyme`
+- vybereš si, co použiješ, a zkopíruješ výsledný text
 
-## 🚀 Klíčové Funkce
+## Co appka teď umí
 
-### Analýza a Editace
-- **Deep Lyric Scan:** Hloubková analýza textu. Detekuje rytmické chyby ("rushing"), klišé, slabé rýmy a nadměrné opakování slov.
-- **Prosodic Architect:** Automatické generování 3 variant pro každý problematický úsek textu (zaměření na flow, význam nebo rým).
-- **Smart Suggestions:** Chytrá vylepšení i pro ne-problematické segmenty - alternativní frázování, rýmová vylepšení, flow variace.
-- **Iterativní Editor:** Interaktivní rozhraní, kde si uživatel vybírá nejlepší varianty nebo nechává AI generovat nové.
-- **Vizualizace rytmu:** Vizuální zobrazení slabik, rýmů a stress patternů.
+- řádkovou analýzu textu v jednom AI requestu
+- strict JSON kontrakt pro odpověď AI
+- 3 varianty pro problematické řádky
+- regenerate pouze jednoho řádku
+- diff highlight změn vůči originálu
+- průběžně skládaný výsledný text
+- copy do schránky
+- lokální draft save přes `localStorage`
 
-### Meta Tags a Export
-- **Meta Tags Editor:** Manuální přidávání tagů jako [Verse], [Chorus], [Drop], [Bridge], [Intro], [Outro] a dalších.
-- **AI návrhy tagů:** Umělá inteligence navrhne vhodné tagy podle struktury textu.
-- **Export formáty:** TXT, JSON, Suno/Udio formát.
+## Co je mimo MVP
 
-### Nástroje
-- **BPM Analyzer:** Detekce tempa z textu/kontextu, žánrové BPM rozsahy, flow intensity.
-- **Beat Grid:** Vizuální zobrazení rytmu na časové ose.
-- **Rýmovač:** Český slovník rýmů s detekcí dokonalých a přibližných rýmů.
-- **Batch zpracování:** Zpracování více textů najednou.
-- **Versionování:** Historie změn segmentů s možností undo/redo.
+Tyto věci nejsou součástí hlavního flow a nejsou aktuálně cílem produktu:
+- BPM analyzer
+- beat grid
+- batch processing
+- meta tags editor
+- smart suggestions mimo základní řádkové varianty
+- pokročilé AI módy
+- PRO monetizace
 
-### AI Módy
+## Stack
 
-AI automaticky detekuje záměr uživatele na základě vstupu a aktivuje jeden z následujících módů:
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS v4
+- Google Gemini / Ollama
+- Capacitor Android
 
-- **MÓD 1 (Adaptace podle Žánru):** Upraví text pro konkrétní žánr (Hip-Hop, Trap, Lo-Fi, Boombap...)
-- **MÓD 2 (Adaptace podle Interpreta):** Přepíše text ve stylu konkrétního umělce.
-- **MÓD 3 (Generování Promptu):** Vytvoří masivní prompt pro AI hudební generátory.
-- **MÓD 4 (Překlad a Analýza):** Umělecký překlad se zachováním rytmiky.
-- **MÓD 5 (Interaktivní Editace / Remix):** Provede specifické strukturální nebo náladové změny.
-- **MÓD 6 (Kompozice k Vokálu):** Navrhne hudební kompozici pro acappella.
+## Struktura repo
 
-### Multi-Provider Support
-- **Google Gemini API:** Hlavní AI engine (gemini-2.0-flash-exp)
-- **Ollama:** Lokální inference pro offline použití
-- **Semantic Caching:** 30min cache pro stejné vstupy
+```text
+app/
+  AppShell.tsx
+  styles/app.css
+features/
+  editor/
+    editorTypes.ts
+    LineReviewPanel.tsx
+    LyricsInputPanel.tsx
+    lyricsAi.ts
+    textDiff.ts
+  settings/
+    AiProviderPanel.tsx
+shared/
+  theme/ThemeContext.tsx
+  toast/ToastContext.tsx
+  ui/ThemeSwitch.tsx
+  ui/ToastViewport.tsx
+tests/
+  ai-provider-panel.test.tsx
+  mvp-core.test.ts
+  setup.ts
+android/
+  native shell for Producer.ai
+main.tsx
+```
 
-## 💻 Technologie
-
-- **Frontend:** React 19, TypeScript, Tailwind CSS v4
-- **AI Engine:** Google Gemini API / Ollama
-- **PWA:** Offline režim, instalovatelná aplikace
-- **Design:** Moderní Dark Mode s micro-interakcemi
-
-## 🛠️ Instalace
+## Lokální spuštění
 
 ```bash
 npm install
 npm run dev
 ```
 
-## 📦 Build
+## Build
 
 ```bash
 npm run build
 ```
 
-## 🧪 Testy
+## Android
+
+Android shell je vedený jako tenká obálka kolem webového MVP.
+
+Aktuální Android naming:
+- `appName`: `Producer.ai`
+- `appId`: `com.producer.ai.app`
+- hlavní nativní plugin: `LyricsEditorPlugin`
+- hlavní nativní service: `LyricsEditorService`
+- hlavní Android theme: `ProducerMvpTheme`
+
+Poznámka:
+- `appId` jsem záměrně neměnil, aby se nerozbila identita aplikace a navázané buildy
+
+Základní Android workflow:
 
 ```bash
-npm test        # Spustit testy
-npm run test:watch  # Watch mode
+npm install
+npm run build
+npx cap sync android
+./android/gradlew -p android assembleDebug
 ```
 
-## 📱 PWA Instalace
+Výstup debug APK:
+- `android/app/build/outputs/apk/debug/app-debug.apk`
 
-1. Nasadit na HTTPS server
-2. Otevřít v prohlížeči (Chrome/Safari/Edge)
-3. Zvolit "Instalovat aplikaci"
+## Testy
 
-## 📋 Nové funkce (poslední aktualizace)
-
-- ✅ Smart Suggestions pro všechny segmenty
-- ✅ Manuální Meta Tags editor
-- ✅ BPM Analyzer s Beat Grid
-- ✅ Versionování s undo/redo
-- ✅ Rýmovač a slovník
-- ✅ Batch zpracování
-- ✅ Export TXT/JSON/Suno
-- ✅ Offline PWA režim
-- ✅ Tooltips a nápovědy
-- ✅ Dark/Light mode
-- ✅ Mobile swipe gestures
-- ✅ Projekt saving/loading
-
-## 📁 Struktura projektu
-
-```
-/producer
-├── src/
-│   ├── components/       # React komponenty
-│   │   ├── ui/          # UI komponenty (Tooltip, BeatGrid, Skeleton)
-│   │   └── *.tsx        # Hlavní komponenty
-│   ├── contexts/         # React Contexts
-│   │   ├── ThemeContext.tsx
-│   │   ├── ToastContext.tsx
-│   │   ├── ProjectContext.tsx
-│   │   ├── VersionContext.tsx
-│   │   └── FeedbackContext.tsx
-│   ├── services/         # API služby
-│   │   └── geminiService.ts
-│   ├── utils/            # Utility funkce
-│   │   ├── bpmAnalysis.ts
-│   │   ├── rhyme.ts
-│   │   └── export.ts
-│   ├── hooks/            # Custom hooks
-│   ├── test/             # Testy
-│   └── types.ts          # TypeScript typy
-├── public/               # Statické soubory
-├── vite.config.ts        # Vite konfigurace
-├── tailwind.config.js    # Tailwind konfigurace
-└── package.json
+```bash
+npm test
 ```
 
-## 📄 License
+## Poznámky k AI vrstvě
 
-MIT
+- aplikace posílá celý text najednou kvůli kontextu
+- výstup se mapuje zpět po řádcích
+- při nevalidní AI odpovědi se použije bezpečný fallback
+- aktuální limit je maximálně 30 řádků na request
+
+## Aktuální směr produktu
+
+Cíl není budovat široký “lyric workstation”.
+
+Cíl je:
+- jedno tlačítko
+- jeden problém
+- jedno řešení
+
+Tedy rychle zlepšit slabé řádky, zachovat význam a dát uživateli kontrolu nad výsledkem.
