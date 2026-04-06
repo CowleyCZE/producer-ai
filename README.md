@@ -1,35 +1,59 @@
 # Producer.ai
 
-`Producer.ai` je jednoduché MVP pro úpravu rapových textů v češtině.
+`Producer.ai` je úzké MVP pro úpravu českých rapových textů po řádcích.
 
-Základní flow je záměrně úzké:
-- vložíš text
-- zvolíš styl a energii
-- AI vytipuje problémové řádky
-- pro každý problémový řádek vrátí 3 varianty: `balanced`, `flow`, `rhyme`
-- vybereš si, co použiješ, a zkopíruješ výsledný text
+Aktuální produktový cíl:
+- vložit text
+- zvolit styl a energii
+- nechat AI označit slabší řádky
+- pro problémové řádky dostat 3 varianty: `balanced`, `flow`, `rhyme`
+- vybrat lepší verze a zkopírovat výsledný text
 
-## Co appka teď umí
+## Stav aplikace
 
-- řádkovou analýzu textu v jednom AI requestu
-- strict JSON kontrakt pro odpověď AI
-- 3 varianty pro problematické řádky
-- regenerate pouze jednoho řádku
-- diff highlight změn vůči originálu
-- průběžně skládaný výsledný text
-- copy do schránky
+Aktuální webová aplikace už není původní široký lyric workstation.
+
+Současný stav:
+- jedna hlavní obrazovka s inputem a výsledkovým editorem
+- AI analýza po řádcích v jednom requestu
+- strict JSON kontrakt pro `lines`
 - lokální draft save přes `localStorage`
+- diff highlight změn proti originálu
+- regenerate pouze jednoho řádku
+- sticky preview a copy akce pro desktop i mobil
+- přepínatelný AI backend: Google Gemini nebo lokální Ollama
+
+## Co je hotové
+
+- zúžený MVP flow `INPUT -> RESULTS`
+- nové typy a editor model v `features/editor/editorTypes.ts`
+- AI vrstva v `features/editor/lyricsAi.ts`
+- validace a fallbacky pro nevalidní AI odpovědi
+- ochrana proti prázdným, duplicitním a prakticky nezměněným alternativám
+- limit vstupu na prvních 30 řádků se srozumitelnou hláškou
+- line-by-line editor s okamžitým skládáním výsledku
+- základní testy pro core flow a AI provider panel
+- Android shell přejmenovaný na aktuální MVP strukturu
+
+## Co ještě zbývá
+
+- dál ladit prompt pro přirozenější češtinu, flow a rýmy
+- ještě víc zrychlit mobilní výběr variant
+- ověřit Android build a chování na zařízení
+- rozšířit testy jen o další skutečné regresní body
 
 ## Co je mimo MVP
 
-Tyto věci nejsou součástí hlavního flow a nejsou aktuálně cílem produktu:
+Tyto věci nejsou součástí aktuálního releasu:
 - BPM analyzer
 - beat grid
 - batch processing
-- meta tags editor
-- smart suggestions mimo základní řádkové varianty
-- pokročilé AI módy
-- PRO monetizace
+- samostatný project manager
+- rhyme dictionary jako samostatný nástroj
+- scoring 0-100
+- explain-why mód
+- undo / redo
+- PRO monetizace a rate limiting
 
 ## Stack
 
@@ -76,27 +100,48 @@ npm install
 npm run dev
 ```
 
-## Build
+Typická adresa dev serveru:
+- `http://localhost:5173`
+
+## Příkazy
 
 ```bash
+npm run dev
 npm run build
+npm run preview
+npm test
 ```
+
+## AI backend
+
+### Google Gemini
+
+1. Získej API key na `https://aistudio.google.com/app/apikey`
+2. Otevři panel `AI Backend`
+3. Zadej API key
+4. Potvrď `Připojit Gemini API`
+
+### Ollama
+
+1. Nainstaluj Ollama
+2. Spusť `ollama serve`
+3. V aplikaci přepni na `Lokální Ollama`
+4. Potvrď připojení
+
+Appka si po připojení uloží provider lokálně.
 
 ## Android
 
-Android shell je vedený jako tenká obálka kolem webového MVP.
+Android vrstva je tenký Capacitor shell nad webovým MVP.
 
-Aktuální Android naming:
+Aktuální Android identita:
 - `appName`: `Producer.ai`
 - `appId`: `com.producer.ai.app`
-- hlavní nativní plugin: `LyricsEditorPlugin`
-- hlavní nativní service: `LyricsEditorService`
-- hlavní Android theme: `ProducerMvpTheme`
+- plugin: `LyricsEditorPlugin`
+- service: `LyricsEditorService`
+- theme: `ProducerMvpTheme`
 
-Poznámka:
-- `appId` jsem záměrně neměnil, aby se nerozbila identita aplikace a navázané buildy
-
-Základní Android workflow:
+Základní workflow:
 
 ```bash
 npm install
@@ -108,26 +153,20 @@ npx cap sync android
 Výstup debug APK:
 - `android/app/build/outputs/apk/debug/app-debug.apk`
 
-## Testy
-
-```bash
-npm test
-```
-
 ## Poznámky k AI vrstvě
 
-- aplikace posílá celý text najednou kvůli kontextu
-- výstup se mapuje zpět po řádcích
-- při nevalidní AI odpovědi se použije bezpečný fallback
-- aktuální limit je maximálně 30 řádků na request
+- celý text se posílá najednou kvůli kontextu
+- výsledek se mapuje zpět na původní řádky
+- pokud AI vrátí špatný JSON nebo slabé alternativy, UI nespadne a použije fallback
+- při vstupu nad 30 řádků se zpracuje jen prvních 30
 
-## Aktuální směr produktu
+## Směr produktu
 
-Cíl není budovat široký “lyric workstation”.
+Cíl není vracet do aplikace původní široký toolset.
 
 Cíl je:
 - jedno tlačítko
 - jeden problém
 - jedno řešení
 
-Tedy rychle zlepšit slabé řádky, zachovat význam a dát uživateli kontrolu nad výsledkem.
+Tedy rychle zlepšit slabé řádky, zachovat význam a nechat uživateli kontrolu nad výsledkem.

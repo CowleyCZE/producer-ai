@@ -1,6 +1,6 @@
 # Producer.ai MVP - Setup
 
-Tento projekt je úzké MVP pro úpravu rapových textů po řádcích.
+Tento projekt je aktuálně úzké MVP pro úpravu rapových textů po řádcích.
 
 ## Požadavky
 
@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-Vývojový server pak poběží na lokální Vite adrese, typicky:
+Dev server běží typicky na:
 - `http://localhost:5173`
 
 ## Web příkazy
@@ -33,25 +33,49 @@ npm run preview
 npm test
 ```
 
-## AI backend
+## AI backend setup
+
+V aplikaci je panel `AI Backend`, kde se provider připojuje a přepíná.
 
 ### Google Gemini
 
 1. Získej API key na `https://aistudio.google.com/app/apikey`
-2. Otevři v aplikaci panel AI provideru
-3. Zadej API key
-4. Potvrď `Připojit Gemini API`
+2. Otevři panel `AI Backend`
+3. Vyber `Google Gemini`
+4. Vlož API key
+5. Klikni na `Připojit Gemini API`
 
 ### Ollama
 
 1. Nainstaluj Ollama
 2. Spusť `ollama serve`
-3. V aplikaci přepni na `Lokální Ollama`
-4. Potvrď připojení
+3. Otevři panel `AI Backend`
+4. Vyber `Lokální Ollama`
+5. Klikni na `Připojit k Ollama`
+
+Poznámka:
+- aplikace používá první vhodný dostupný model, typicky `qwen...`
+- připojený provider se ukládá do `localStorage`
+
+## Jak dnes funguje MVP flow
+
+1. Připojíš AI backend
+2. Vložíš text
+3. Zvolíš styl a energii
+4. Klikneš na `Vylepšit text`
+5. Ve výsledcích vybíráš varianty po řádcích
+6. Zkopíruješ složený text
+
+## Limity a fallbacky
+
+- AI request zpracuje maximálně prvních 30 řádků
+- při nevalidní AI odpovědi se použije bezpečný fallback
+- když AI vrátí prázdné nebo duplicitní varianty, aplikace je zahodí
+- rozdělaná práce se obnoví po refreshi přes `localStorage`
 
 ## Android workflow
 
-Android vrstva je tenký Capacitor shell nad webovým MVP.
+Android je tenký Capacitor shell nad webovým MVP.
 
 Aktuální Android identita:
 - `appName`: `Producer.ai`
@@ -59,9 +83,6 @@ Aktuální Android identita:
 - plugin: `LyricsEditorPlugin`
 - service: `LyricsEditorService`
 - theme: `ProducerMvpTheme`
-
-Poznámka:
-- `appId` zůstává beze změny schválně, aby se nerozbila identita aplikace
 
 ### Android build
 
@@ -75,22 +96,11 @@ npx cap sync android
 Výstup:
 - `android/app/build/outputs/apk/debug/app-debug.apk`
 
-### Android shell sync po změně webu
+### Sync po změně webu
 
 ```bash
 npm run build
 npx cap sync android
-```
-
-## Termux / mobilní lokální běh
-
-```bash
-pkg update
-pkg install nodejs git
-git clone https://github.com/CowleyCZE/producer-ai.git
-cd producer-ai
-npm install
-npm run dev -- --host 0.0.0.0
 ```
 
 ## PWA instalace

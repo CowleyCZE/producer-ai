@@ -12,6 +12,7 @@ const GEMINI_MODEL = 'gemini-2.0-flash-exp';
 const OLLAMA_BASE_URL = 'http://localhost:11434';
 const MAX_LINES = 30;
 const MAX_LINE_LENGTH_DELTA = 0.3;
+const MIN_VARIANT_LENGTH = 3;
 
 interface CacheEntry {
   result: AnalysisResult;
@@ -352,7 +353,17 @@ function sanitizeAlternativeText(value: unknown): string {
     return '';
   }
 
-  return value.replace(/[^\p{L}\p{N}\p{P}\p{Zs}\n]/gu, '').trim();
+  return value
+    .replace(/[^\p{L}\p{N}\p{P}\p{Zs}\n]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeCompareText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .trim();
 }
 
 function normalizeAlternatives(source: unknown, original: string): LineAlternatives | null {
@@ -369,10 +380,15 @@ function normalizeAlternatives(source: unknown, original: string): LineAlternati
 
   const originalLength = Math.max(original.trim().length, 1);
   const allValues = Object.values(normalized);
+  const normalizedOriginal = normalizeCompareText(original);
+  const distinctNormalizedValues = new Set(allValues.map((value) => normalizeCompareText(value)).filter(Boolean));
   const hasEmptyValue = allValues.some((value) => !value);
+  const tooShortValue = allValues.some((value) => value.length < MIN_VARIANT_LENGTH);
   const exceedsDelta = allValues.some((value) => Math.abs(value.length - originalLength) / originalLength > MAX_LINE_LENGTH_DELTA);
+  const matchesOriginalTooClosely = allValues.some((value) => normalizeCompareText(value) === normalizedOriginal);
+  const hasDuplicateAlternatives = distinctNormalizedValues.size !== allValues.length;
 
-  if (hasEmptyValue || exceedsDelta) {
+  if (hasEmptyValue || tooShortValue || exceedsDelta || matchesOriginalTooClosely || hasDuplicateAlternatives) {
     return null;
   }
 
@@ -438,8 +454,7 @@ function normalizeAnalysisResponse(parsed: unknown, originalText: string): Analy
 
   const normalizedLines = originalLines.map((fallbackOriginal, index) => {
     const source = payload.lines?.[index];
-    const aiOriginal = typeof source?.original === 'string' ? source.original : fallbackOriginal;
-    const original = aiOriginal || fallbackOriginal;
+    const original = fallbackOriginal;
     const aiNeedsFix = Boolean(source?.needs_fix);
     const heuristicNeedsFix = needsHeuristicFix(original);
     const alternatives = normalizeAlternatives(source?.alternatives, original);
@@ -495,10 +510,20 @@ export async function analyzeLyrics(text: string, options: AnalyzeOptions): Prom
     return { lines: [] };
   }
 
+  const originalLineCount = text.split('\n').length;
   const limitedText = text.split('\n').slice(0, MAX_LINES).join('\n');
+  const wasTruncated = originalLineCount > MAX_LINES;
   const cached = semanticCache.get(limitedText, options.style, options.energy);
   if (cached) {
-    return cached;
+    if (!wasTruncated) {
+      return cached;
+    }
+
+    return {
+      ...cached,
+      usedFallback: true,
+      fallbackMessage: `Text je delší než ${MAX_LINES} řádků, proto jsem zpracoval jen prvních ${MAX_LINES}.`,
+    };
   }
 
   try {
@@ -506,14 +531,23 @@ export async function analyzeLyrics(text: string, options: AnalyzeOptions): Prom
     const responseText = await callAI(prompt, getAnalyzeSystemPrompt());
     const parsed = parseJSONResponse(responseText);
     const result = normalizeAnalysisResponse(parsed, limitedText);
+    const finalResult = wasTruncated
+      ? {
+          ...result,
+          usedFallback: true,
+          fallbackMessage: `Text je delší než ${MAX_LINES} řádků, proto jsem zpracoval jen prvních ${MAX_LINES}.`,
+        }
+      : result;
     semanticCache.set(limitedText, options.style, options.energy, result);
-    return result;
+    return finalResult;
   } catch (error) {
     console.error('Analysis failed, using fallback:', error);
     return {
       lines: createFallbackLines(limitedText),
       usedFallback: true,
-      fallbackMessage: 'AI odpověď selhala, proto jsem použil lokální fallback.',
+      fallbackMessage: wasTruncated
+        ? `AI odpověď selhala a text je delší než ${MAX_LINES} řádků, proto jsem použil lokální fallback jen pro prvních ${MAX_LINES} řádků.`
+        : 'AI odpověď selhala, proto jsem použil lokální fallback.',
     };
   }
 }
@@ -543,3 +577,8 @@ export async function regenerateLine(
     return fallbackAlternatives(line.original);
   }
 }
+
+export const __testing = {
+  normalizeAlternatives,
+  normalizeAnalysisResponse,
+};

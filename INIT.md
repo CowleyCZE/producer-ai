@@ -2,62 +2,63 @@
 
 ## Záměr aplikace
 
-`Producer.ai` má být úzké MVP pro rychlou úpravu rapových textů po řádcích.
+`Producer.ai` je úzké MVP pro rychlou úpravu českých rapových textů po řádcích.
 
 Uživatel:
 - vloží text
 - zvolí styl a energii
-- nechá AI vytipovat slabé řádky
-- pro každý problémový řádek dostane 3 použitelné varianty
-- vybere lepší verzi a zkopíruje výsledný text
+- nechá AI označit slabé řádky
+- pro problémové řádky dostane 3 varianty
+- vybere lepší verze a zkopíruje výsledný text
 
-## Co už je hotové
+## Co je teď hotové
 
-- zúžené MVP flow bez původního širokého dashboardu
+- zúžené MVP flow bez původního dashboardu a vedlejších toolů
+- přechod na architekturu `app/`, `features/`, `shared/`
 - line-based AI analýza v jednom requestu
 - varianty `balanced`, `flow`, `rhyme`
 - regenerate jednoho řádku
 - diff highlight proti originálu
 - lokální ukládání draftu
-- základní Android shell přes Capacitor
-- základní testy pro MVP flow a provider restore
+- sticky preview a copy akce pro desktop i mobil
+- AI provider panel pro Gemini a Ollama
+- robustnější validace AI odpovědi a line-level fallbacky
+- základní web testy pro MVP flow a provider panel
+- základní Android shell přes Capacitor s novým namingem
 
-## Co chceme dál udělat
+## Co dál chceme dělat
 
-### Produkt
+### Produkt a UX
 
-- dotáhnout editor do opravdu rychlého "vyber a pokračuj" flow
-- zlepšit čitelnost problémových řádků na mobilu
-- držet produkt úzký a nevracet do MVP vedlejší nástroje
+- ještě zrychlit flow "vyber a pokračuj"
+- zlepšit čitelnost variant na menších displejích
+- případně přidat jemný první onboarding bez rozšíření scope
 
 ### AI vrstva
 
-- zpřesnit fallbacky pro slabé nebo nevalidní odpovědi modelu
-- dál ladit prompt pro češtinu, rytmus a přirozenější rýmy
-- přidat robustnější validaci line-level výstupu
-
-### UX a UI
-
-- doladit input obrazovku a provider panel pro menší displeje
-- zlepšit sticky akce a preview výsledného textu
-- případně přidat jemný onboarding pro první použití
+- dál ladit prompt pro češtinu, rytmus a rýmy
+- zpřesnit heuristiky pro označení problémových řádků
+- rozšiřovat testy na další reálné regresní body AI validace
 
 ### Android
 
-- dočistit Android package a test namespace na `com.producer.ai.app`
-- udržet Android shell jako tenkou obálku kolem webového MVP
-- později ověřit build a chování na reálném zařízení
+- ověřit debug build a shell na zařízení
+- dočistit Android namespace a chování kolem shellu tam, kde to ještě zůstalo po staré appce
 
 ### Kód a kvalita
 
-- průběžně držet naming konzistentní s MVP strukturou
+- držet dokumentaci synchronně s MVP realitou
 - nepřidávat zpět mrtvé post-MVP moduly
-- rozšiřovat testy jen tam, kde kryjí reálné regresní body
+- rozšiřovat testy pouze tam, kde kryjí skutečné riziko
 
 ## Co teď vědomě neděláme
 
 - BPM analyzer
 - batch processing
-- širší projekt manager
+- širší project manager
 - rhyme dictionary jako samostatný nástroj
+- scoring 0-100
+- explain why
+- undo / redo
+- rate limiting a PRO režim
 - komplexní workstation funkce mimo hlavní line editor

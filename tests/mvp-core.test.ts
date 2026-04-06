@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assembleLyrics } from '../features/editor/lyricsAi';
+import { __testing, assembleLyrics } from '../features/editor/lyricsAi';
 import { diffText } from '../features/editor/textDiff';
 import { EditableLine } from '../features/editor/editorTypes';
 
@@ -34,5 +34,40 @@ describe('MVP core flow', () => {
 
     expect(tokens.some((token) => token.changed)).toBe(true);
     expect(tokens.map((token) => token.value).join('')).toBe('Makám celej den, držím směr');
+  });
+
+  it('rejects AI alternatives that only repeat the original line', () => {
+    const alternatives = __testing.normalizeAlternatives(
+      {
+        balanced: 'Makám celej den',
+        flow: 'Makám celej den',
+        rhyme: 'Makám celej den',
+      },
+      'Makám celej den',
+    );
+
+    expect(alternatives).toBeNull();
+  });
+
+  it('keeps original line mapping even when AI returns a different original value', () => {
+    const result = __testing.normalizeAnalysisResponse(
+      {
+        lines: [
+          {
+            original: 'Úplně jiný text',
+            needs_fix: true,
+            alternatives: {
+              balanced: 'Makám celej večer',
+              flow: 'Makám celej zas',
+              rhyme: 'Makám celej ven',
+            },
+          },
+        ],
+      },
+      'Makám celej den',
+    );
+
+    expect(result.lines[0]?.original).toBe('Makám celej den');
+    expect(result.lines[0]?.alternatives?.flow).toBe('Makám celej zas');
   });
 });
