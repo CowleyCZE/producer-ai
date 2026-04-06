@@ -73,8 +73,8 @@ class LyricsEditorPlugin : Plugin() {
 
     @PluginMethod
     fun loadModel(call: PluginCall) {
-        val path = call.getString("path")
-        if (path == null) {
+        val path = call.getString("path")?.trim()
+        if (path.isNullOrEmpty()) {
             call.reject("Path is required")
             return
         }

@@ -34,6 +34,7 @@ data class EditorAnalysisResult(
 
 class LyricsEditorService(private val context: Context) {
     private var llmInference: LlmInference? = null
+    private val inferenceLock = Any()
     private val supportedModes = setOf("AUTO", "BALANCED", "FLOW", "RHYME")
 
     private val json = Json {
@@ -50,11 +51,13 @@ class LyricsEditorService(private val context: Context) {
     }
 
     private fun setupInference(modelPath: String) {
-        closeInferenceIfNeeded()
-        val options = LlmInference.LlmInferenceOptions.builder()
-            .setModelPath(modelPath)
-            .build()
-        llmInference = LlmInference.createFromOptions(context, options)
+        synchronized(inferenceLock) {
+            closeInferenceIfNeeded()
+            val options = LlmInference.LlmInferenceOptions.builder()
+                .setModelPath(modelPath)
+                .build()
+            llmInference = LlmInference.createFromOptions(context, options)
+        }
     }
 
     fun loadModel(path: String): Result<Unit> = runCatching {
@@ -114,8 +117,9 @@ class LyricsEditorService(private val context: Context) {
             $normalizedText
         """.trimIndent()
 
-        val rawResponse = llmInference?.generateResponse(prompt)
-            ?: throw IllegalStateException("LlmInference not initialized.")
+        val rawResponse = synchronized(inferenceLock) {
+            llmInference?.generateResponse(prompt)
+        } ?: throw IllegalStateException("LlmInference not initialized.")
         val cleanedJson = cleanJsonString(rawResponse)
         json.decodeFromString<EditorAnalysisResult>(cleanedJson)
     }
