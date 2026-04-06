@@ -49,6 +49,20 @@ describe('AppShell draft restore', () => {
     expect(draft?.lines).toHaveLength(1);
   });
 
+  it('forces INPUT state when draft says RESULTS but has no lines', () => {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+      appState: AppState.RESULTS,
+      lyrics: 'Makám celej den',
+      style: StyleOption.BOOMBAP,
+      energy: EnergyOption.MEDIUM,
+      lines: [],
+    }));
+
+    const draft = appShellTesting.getInitialDraft();
+    expect(draft.appState).toBe(AppState.INPUT);
+    expect(draft.lyrics).toBe('Makám celej den');
+  });
+
   it('removes broken JSON draft payloads', () => {
     localStorage.setItem(DRAFT_STORAGE_KEY, '{not-valid-json');
 

@@ -65,6 +65,52 @@ describe('LineReviewPanel', () => {
     });
   });
 
+  it('disables regenerate controls while one regenerate request is running', async () => {
+    let resolveRegenerate!: (value: null) => void;
+    lineReviewMocks.regenerateLine.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRegenerate = resolve as (value: null) => void;
+      }),
+    );
+
+    renderPanel([
+      {
+        id: 'line-0',
+        original: 'Skaka pes přes oves',
+        needsFix: true,
+        alternatives: {
+          balanced: 'Skáče pes přes ten oves',
+          flow: 'Skáče pes, přes oves',
+          rhyme: 'Skáče pes přes oves, nese otisk do obce',
+        },
+        selectedOption: null,
+      },
+      {
+        id: 'line-1',
+        original: 'Přes zelenou louku',
+        needsFix: true,
+        alternatives: {
+          balanced: 'Přes zelenou louku jdu',
+          flow: 'Přes zelenou louku, klid',
+          rhyme: 'Přes zelenou louku pluju',
+        },
+        selectedOption: null,
+      },
+    ]);
+
+    const buttons = screen.getAllByRole('button', { name: 'Zkus znovu' });
+    fireEvent.click(buttons[0]);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Generuji...' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Zkus znovu' })).toBeDisabled();
+    });
+    resolveRegenerate(null);
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Generuji...' })).not.toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Zkus znovu' }).every((button) => !button.hasAttribute('disabled'))).toBe(true);
+    });
+  });
+
   it('marks keeping the original line as a resolved decision', () => {
     renderPanel([
       {

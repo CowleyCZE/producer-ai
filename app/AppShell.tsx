@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import LineReviewPanel from '../features/editor/LineReviewPanel';
 import LyricsInputPanel from '../features/editor/LyricsInputPanel';
 import { AppState, EditableLine, EnergyOption, StyleOption } from '../features/editor/editorTypes';
@@ -23,9 +23,9 @@ const EditorWorkspace: React.FC = () => {
   const [modelReady, setModelReady] = useState(false);
   const { success, error: showError, warning } = useToast();
 
-  const handleModelStatusChange = (nextStatus: string) => {
+  const handleModelStatusChange = useCallback((nextStatus: string) => {
     setModelReady(nextStatus === 'ready');
-  };
+  }, []);
 
   const handleAnalyze = async () => {
     if (!lyrics.trim()) {
@@ -238,13 +238,27 @@ function writeDraft(draft: AppDraft): void {
 }
 
 function getInitialDraft(): AppDraft {
-  return readDraft() || {
+  const fallbackDraft: AppDraft = {
     appState: AppState.INPUT,
     lyrics: '',
     style: StyleOption.BOOMBAP,
     energy: EnergyOption.MEDIUM,
     lines: [],
   };
+
+  const draft = readDraft();
+  if (!draft) {
+    return fallbackDraft;
+  }
+
+  if (draft.appState === AppState.RESULTS && draft.lines.length === 0) {
+    return {
+      ...draft,
+      appState: AppState.INPUT,
+    };
+  }
+
+  return draft;
 }
 
 export const __testing = {

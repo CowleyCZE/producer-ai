@@ -43,6 +43,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
   const [showMobilePreview, setShowMobilePreview] = useState(false);
   const { success, warning, error: showError } = useToast();
   const lineRefs = useRef<Record<string, HTMLElement | null>>({});
+  const regenerationLockRef = useRef(false);
 
   const assembledLyrics = useMemo(() => assembleLyrics(lines), [lines]);
   const resolvedCount = useMemo(() => lines.filter((line) => line.needsFix && isLineResolved(line)).length, [lines]);
@@ -92,6 +93,11 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
   };
 
   const handleRegenerate = async (lineId: string) => {
+    if (regenerationLockRef.current) {
+      return;
+    }
+
+    regenerationLockRef.current = true;
     setRegeneratingLineId(lineId);
 
     try {
@@ -119,6 +125,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
       console.error('Regenerate failed:', error);
       showError('Nepodařilo se vygenerovat nové varianty.');
     } finally {
+      regenerationLockRef.current = false;
       setRegeneratingLineId(null);
     }
   };
@@ -298,7 +305,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                       <p className="text-sm font-semibold text-surface-300">Varianty</p>
                       <button
                         onClick={() => handleRegenerate(line.id)}
-                        disabled={isRegenerating}
+                        disabled={Boolean(regeneratingLineId)}
                         className="btn-ghost self-start rounded-xl px-3 py-2 text-sm sm:self-auto"
                       >
                         {isRegenerating ? 'Generuji...' : 'Zkus znovu'}
@@ -348,7 +355,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                     <div className="mt-4 flex flex-wrap gap-3">
                       <button
                         onClick={() => handleRegenerate(line.id)}
-                        disabled={isRegenerating}
+                        disabled={Boolean(regeneratingLineId)}
                         className="btn-ghost rounded-xl px-3 py-2 text-sm"
                       >
                         {isRegenerating ? 'Generuji...' : 'Zkus znovu'}
