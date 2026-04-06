@@ -138,6 +138,8 @@ const REMOTE_PROVIDER_SET = new Set<ModelProvider>([
   ModelProvider.GROQ,
 ]);
 
+export type ApiKeySource = 'session' | 'env' | null;
+
 function isKnownProvider(value: string | null): value is ModelProvider {
   return Object.values(ModelProvider).includes(value as ModelProvider);
 }
@@ -243,6 +245,33 @@ export function getProviderApiKey(provider: ModelProvider): string | null {
     && !isGeminiEnvApiKeyDisabled()
   ) {
     return import.meta.env.VITE_GEMINI_API_KEY;
+  }
+
+  return null;
+}
+
+export function getProviderApiKeySource(provider: ModelProvider): ApiKeySource {
+  if (volatileApiKeyCache.get(provider)) {
+    return 'session';
+  }
+
+  const key = getApiKeyStorageKey(provider);
+  if (!key) {
+    return null;
+  }
+
+  const sessionValue = getSessionStorageOrNull()?.getItem(key) || null;
+  if (sessionValue) {
+    volatileApiKeyCache.set(provider, sessionValue);
+    return 'session';
+  }
+
+  if (
+    provider === ModelProvider.GEMINI
+    && import.meta.env.VITE_GEMINI_API_KEY
+    && !isGeminiEnvApiKeyDisabled()
+  ) {
+    return 'env';
   }
 
   return null;

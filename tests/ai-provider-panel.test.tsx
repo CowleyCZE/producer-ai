@@ -9,6 +9,7 @@ const providerMocks = vi.hoisted(() => ({
   getBaseUrlForProvider: vi.fn(),
   getProvider: vi.fn(),
   getProviderApiKey: vi.fn(),
+  getProviderApiKeySource: vi.fn(),
   getModelForProvider: vi.fn(),
   setBaseUrlForProvider: vi.fn(),
   testProviderConnection: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('../features/editor/lyricsAi', async () => {
     getBaseUrlForProvider: providerMocks.getBaseUrlForProvider,
     getProvider: providerMocks.getProvider,
     getProviderApiKey: providerMocks.getProviderApiKey,
+    getProviderApiKeySource: providerMocks.getProviderApiKeySource,
     getModelForProvider: providerMocks.getModelForProvider,
     setBaseUrlForProvider: providerMocks.setBaseUrlForProvider,
     testProviderConnection: providerMocks.testProviderConnection,
@@ -56,6 +58,9 @@ describe('AiProviderPanel', () => {
     ));
     providerMocks.getProviderApiKey.mockImplementation((provider: ModelProvider) => (
       provider === ModelProvider.GEMINI ? 'stored-key' : ''
+    ));
+    providerMocks.getProviderApiKeySource.mockImplementation((provider: ModelProvider) => (
+      provider === ModelProvider.GEMINI ? 'session' : null
     ));
     providerMocks.getModelForProvider.mockImplementation((provider: ModelProvider) => {
       if (provider === ModelProvider.OLLAMA) {
@@ -352,5 +357,95 @@ describe('AiProviderPanel', () => {
     }).not.toThrow();
 
     removeSpy.mockRestore();
+  });
+
+  it('does not prefill Gemini API input when key source is env', async () => {
+    providerMocks.getProvider.mockReturnValue(ModelProvider.GEMINI);
+    providerMocks.getProviderApiKey.mockReturnValue('env-key');
+    providerMocks.getProviderApiKeySource.mockImplementation((provider: ModelProvider) => (
+      provider === ModelProvider.GEMINI ? 'env' : null
+    ));
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Gemini API připravena')).toBeInTheDocument();
+    });
+
+    if (!screen.queryByPlaceholderText('Zadejte API key...')) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+
+    const apiInput = screen.getByPlaceholderText('Zadejte API key...') as HTMLInputElement;
+    expect(apiInput.value).toBe('');
+    expect(screen.getByText(/VITE_GEMINI_API_KEY/)).toBeInTheDocument();
+  });
+
+  it('allows Gemini connect with env API key even when input is empty', async () => {
+    providerMocks.getProvider.mockReturnValue(ModelProvider.GEMINI);
+    providerMocks.getProviderApiKey.mockReturnValue('env-key');
+    providerMocks.getProviderApiKeySource.mockImplementation((provider: ModelProvider) => (
+      provider === ModelProvider.GEMINI ? 'env' : null
+    ));
+    providerMocks.testProviderConnection.mockResolvedValue(true);
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Gemini API připravena')).toBeInTheDocument();
+    });
+
+    if (!screen.queryByRole('button', { name: /Připojit Gemini/i })) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Připojit Gemini/i }));
+
+    await waitFor(() => {
+      expect(providerMocks.testProviderConnection).toHaveBeenCalledWith(
+        ModelProvider.GEMINI,
+        expect.objectContaining({
+          apiKey: 'env-key',
+        }),
+      );
+    });
+
+    expect(providerMocks.setProviderApiKey).not.toHaveBeenCalled();
+  });
+
+  it('disconnect clears active provider key even when storage provider differs', async () => {
+    let currentProvider = ModelProvider.OPENAI;
+    providerMocks.getProvider.mockImplementation(() => currentProvider);
+    providerMocks.getProviderApiKey.mockImplementation((provider: ModelProvider) => (
+      provider === ModelProvider.OPENAI ? 'openai-key' : ''
+    ));
+    providerMocks.getProviderApiKeySource.mockImplementation((provider: ModelProvider) => (
+      provider === ModelProvider.OPENAI ? 'session' : null
+    ));
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ OpenAI připravena')).toBeInTheDocument();
+    });
+
+    currentProvider = ModelProvider.GEMINI;
+    if (!screen.queryByTitle('Odpojit aktivní provider')) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+    fireEvent.click(screen.getByTitle('Odpojit aktivní provider'));
+
+    expect(providerMocks.clearProviderApiKey).toHaveBeenCalledWith(ModelProvider.OPENAI);
   });
 });

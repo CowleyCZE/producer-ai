@@ -7,6 +7,7 @@ import {
   getModelForProvider,
   getProvider,
   getProviderApiKey,
+  getProviderApiKeySource,
   setBaseUrlForProvider,
   setModelForProvider,
   setProvider,
@@ -137,7 +138,12 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   };
 
   const hydrateProviderFields = (provider: ModelProvider) => {
-    setApiKeyInput(getProviderApiKey(provider) || '');
+    const apiKeySource = getProviderApiKeySource(provider);
+    if (provider === ModelProvider.GEMINI && apiKeySource === 'env') {
+      setApiKeyInput('');
+    } else {
+      setApiKeyInput(getProviderApiKey(provider) || '');
+    }
     setModelInput(getModelForProvider(provider));
     setOllamaBaseUrlInput(getBaseUrlForProvider(ModelProvider.OLLAMA));
   };
@@ -270,9 +276,14 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
     const providerMeta = PROVIDER_OPTIONS.find((option) => option.provider === provider) || activeProviderMeta;
     const remoteProvider = REMOTE_PROVIDERS.has(provider);
     const trimmedApiKey = apiKeyInput.trim();
+    const apiKeySource = getProviderApiKeySource(provider);
+    const fallbackApiKey = provider === ModelProvider.GEMINI && apiKeySource === 'env'
+      ? (getProviderApiKey(provider) || '')
+      : '';
+    const effectiveApiKey = trimmedApiKey || fallbackApiKey;
     const trimmedModel = modelInput.trim() || DEFAULT_MODELS[provider].modelName;
 
-    if (remoteProvider && !trimmedApiKey) {
+    if (remoteProvider && !effectiveApiKey) {
       showError('Prosím zadejte API klíč');
       return;
     }
@@ -314,7 +325,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       }
 
       const isValid = await testProviderConnection(provider, {
-        apiKey: trimmedApiKey,
+        apiKey: effectiveApiKey,
         modelName: trimmedModel,
       });
 
@@ -322,7 +333,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
         throw new Error('Invalid API configuration');
       }
 
-      setProviderApiKey(provider, trimmedApiKey);
+      if (trimmedApiKey) {
+        setProviderApiKey(provider, trimmedApiKey);
+      }
       setModelForProvider(provider, trimmedModel);
       setProvider(provider);
       setIsExpanded(false);
@@ -338,9 +351,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   };
 
   const handleDisconnect = () => {
-    const activeProvider = getProvider();
-    if (REMOTE_PROVIDERS.has(activeProvider)) {
-      clearProviderApiKey(activeProvider);
+    const providerToDisconnect = activeProvider || getProvider();
+    if (REMOTE_PROVIDERS.has(providerToDisconnect)) {
+      clearProviderApiKey(providerToDisconnect);
     }
 
     safeRemoveActiveProviderMarker();
@@ -452,6 +465,11 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
                 <p className="mt-2 text-xs text-surface-500">
                   API klíč se ukládá jen do aktuální relace aplikace. Po zavření se znovu zadává.
                 </p>
+                {selectedProvider === ModelProvider.GEMINI && getProviderApiKeySource(ModelProvider.GEMINI) === 'env' ? (
+                  <p className="mt-2 text-xs text-primary-300">
+                    Aktivní je klíč z `VITE_GEMINI_API_KEY`. Pole můžeš nechat prázdné.
+                  </p>
+                ) : null}
               </div>
             )}
 
