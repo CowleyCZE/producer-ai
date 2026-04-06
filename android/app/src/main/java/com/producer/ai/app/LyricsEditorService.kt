@@ -203,18 +203,24 @@ class LyricsEditorService(private val context: Context) {
         return modelFile
     }
 
-    private fun normalizePromptText(rawText: String): String {
-        if (rawText.isBlank()) {
-            return ""
+    companion object {
+        internal const val MAX_ANALYZE_LINES = 80
+        internal const val MAX_ANALYZE_TEXT_CHARS = 8000
+
+        internal fun normalizePromptText(rawText: String): String {
+            if (rawText.isBlank()) {
+                return ""
+            }
+
+            val normalizedLines = rawText
+                .lineSequence()
+                .take(MAX_ANALYZE_LINES)
+                .joinToString("\n")
+
+            return normalizedLines.trim().take(MAX_ANALYZE_TEXT_CHARS)
         }
-
-        val normalizedLines = rawText
-            .lineSequence()
-            .take(maxAnalyzeLines)
-            .joinToString("\n")
-
-        return normalizedLines.trim().take(maxAnalyzeTextChars)
     }
+
 
     private fun closeInferenceIfNeeded() {
         (llmInference as? AutoCloseable)?.let { inference ->

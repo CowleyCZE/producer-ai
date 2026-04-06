@@ -68,6 +68,7 @@ dependencies {
     // MediaPipe a JSON serializace
     implementation("com.google.mediapipe:tasks-genai:0.10.14")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    testImplementation "androidx.test:core:1.5.0"
 }
 
 apply from: 'capacitor.build.gradle'
