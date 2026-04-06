@@ -37,6 +37,16 @@ vi.mock('../features/editor/lyricsAi', async () => {
 });
 
 describe('AiProviderPanel', () => {
+  const deferred = <T,>() => {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
@@ -93,6 +103,7 @@ describe('AiProviderPanel', () => {
     });
 
     expect(screen.getByText('✓ Ollama připravena')).toBeInTheDocument();
+    expect(providerMocks.getAvailableOllamaModels).toHaveBeenCalledTimes(1);
   });
 
   it('keeps panel stable when Ollama model loading fails during initialization', async () => {
@@ -110,10 +121,10 @@ describe('AiProviderPanel', () => {
     );
 
     await waitFor(() => {
-      expect(onStatusChange).toHaveBeenCalledWith('not_loaded', 'Nastavení AI modelu');
+      expect(onStatusChange).toHaveBeenCalledWith('error', 'Nepodařilo se načíst konfiguraci AI backendu');
     });
 
-    expect(screen.getByText('Nastavení AI modelu')).toBeInTheDocument();
+    expect(screen.getByText('Nepodařilo se načíst konfiguraci AI backendu')).toBeInTheDocument();
   });
 
   it('loads available local models after switching to Ollama', async () => {
@@ -255,5 +266,65 @@ describe('AiProviderPanel', () => {
     });
 
     expect(screen.getByText(/Aktivní: Google Gemini/)).toBeInTheDocument();
+  });
+
+  it('does not override non-Ollama model input when delayed Ollama load resolves', async () => {
+    const modelsDeferred = deferred<string[]>();
+    providerMocks.getAvailableOllamaModels.mockReturnValue(modelsDeferred.promise);
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Backend')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('AI Backend'));
+    fireEvent.click(screen.getByRole('button', { name: /Lokální Ollama/i }));
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI/i }));
+
+    modelsDeferred.resolve(['qwen2.5:3b']);
+    await waitFor(() => {
+      expect(providerMocks.getAvailableOllamaModels).toHaveBeenCalled();
+    });
+
+    const input = screen.getByPlaceholderText('gpt-4.1-mini') as HTMLInputElement;
+    expect(input.value).toBe('gemini-2.0-flash-exp');
+  });
+
+  it('keeps connect status tied to the provider being connected even if tab changes mid-request', async () => {
+    const connectDeferred = deferred<boolean>();
+    providerMocks.testProviderConnection.mockReturnValue(connectDeferred.promise);
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Backend')).toBeInTheDocument();
+    });
+
+    if (!screen.queryByRole('button', { name: /OpenAI/i })) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI/i }));
+    fireEvent.change(screen.getByPlaceholderText('Zadejte API key...'), {
+      target: { value: 'openai-live-key' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('gpt-4.1-mini'), {
+      target: { value: 'gpt-4.1-mini' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Připojit OpenAI/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Google Gemini/i }));
+
+    connectDeferred.resolve(true);
+    await waitFor(() => {
+      expect(screen.getByText('✓ OpenAI připravena')).toBeInTheDocument();
+    });
   });
 });

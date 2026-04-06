@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { DEFAULT_MODELS, ModelProvider } from '../editor/editorTypes';
 import {
   clearProviderApiKey,
@@ -101,6 +101,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   const [ollamaBaseUrlInput, setOllamaBaseUrlInput] = useState<string>(getBaseUrlForProvider(ModelProvider.OLLAMA));
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [isLoadingOllamaModels, setIsLoadingOllamaModels] = useState(false);
+  const hasHydratedRef = useRef(false);
+  const selectedProviderRef = useRef<ModelProvider>(selectedProvider);
+  const ollamaLoadRequestRef = useRef(0);
   const { success, error: showError } = useToast();
 
   const activeProviderMeta = PROVIDER_OPTIONS.find((option) => option.provider === selectedProvider) || PROVIDER_OPTIONS[0];
@@ -132,10 +135,19 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   };
 
   const loadOllamaModels = async (preferStoredModel = true, baseUrl = ollamaBaseUrlInput): Promise<string[]> => {
+    const requestId = ++ollamaLoadRequestRef.current;
     setIsLoadingOllamaModels(true);
 
     try {
       const models = Array.from(new Set(await getAvailableOllamaModels(baseUrl)));
+      const canApplyResult = (
+        requestId === ollamaLoadRequestRef.current
+        && selectedProviderRef.current === ModelProvider.OLLAMA
+      );
+      if (!canApplyResult) {
+        return models;
+      }
+
       setOllamaModels(models);
 
       if (models.length > 0) {
@@ -151,15 +163,25 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
       return models;
     } finally {
-      setIsLoadingOllamaModels(false);
+      if (requestId === ollamaLoadRequestRef.current) {
+        setIsLoadingOllamaModels(false);
+      }
     }
   };
+
+  useEffect(() => {
+    selectedProviderRef.current = selectedProvider;
+  }, [selectedProvider]);
 
   useEffect(() => {
     hydrateProviderFields(selectedProvider);
   }, [selectedProvider]);
 
   useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+
     if (selectedProvider !== ModelProvider.OLLAMA) {
       return;
     }
@@ -227,6 +249,8 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
         setActiveProvider(null);
         setIsExpanded(true);
         updateStatus('error', 'Nepodařilo se načíst konfiguraci AI backendu');
+      } finally {
+        hasHydratedRef.current = true;
       }
     };
 
@@ -235,6 +259,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
   const handleConnect = async () => {
     const provider = selectedProvider;
+    const providerMeta = PROVIDER_OPTIONS.find((option) => option.provider === provider) || activeProviderMeta;
     const remoteProvider = REMOTE_PROVIDERS.has(provider);
     const trimmedApiKey = apiKeyInput.trim();
     const trimmedModel = modelInput.trim() || DEFAULT_MODELS[provider].modelName;
@@ -245,7 +270,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
     }
 
     try {
-      updateStatus('loading', `Ověřuji ${activeProviderMeta.label}...`);
+      updateStatus('loading', `Ověřuji ${providerMeta.label}...`);
 
       if (provider === ModelProvider.OLLAMA) {
         const trimmedBaseUrl = ollamaBaseUrlInput.trim();
@@ -294,11 +319,11 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       setProvider(provider);
       setIsExpanded(false);
       markProviderReady(provider);
-      success(`${activeProviderMeta.label} úspěšně připojena!`);
+      success(`${providerMeta.label} úspěšně připojena!`);
     } catch (error: any) {
-      console.error(`${activeProviderMeta.label} connection error:`, error);
+      console.error(`${providerMeta.label} connection error:`, error);
       if (!restoreActiveProviderStatus()) {
-        updateStatus('error', `${activeProviderMeta.label} nedostupná`);
+        updateStatus('error', `${providerMeta.label} nedostupná`);
       }
       showError(buildConnectionErrorMessage(provider, error?.message));
     }
