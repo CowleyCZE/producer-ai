@@ -59,6 +59,7 @@ class LyricsEditorPlugin : Plugin() {
 
     override fun handleOnDestroy() {
         scope.cancel("LyricsEditorPlugin destroyed")
+        lyricsEditorService.release()
         super.handleOnDestroy()
     }
 

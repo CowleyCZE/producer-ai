@@ -36,6 +36,7 @@ class LyricsEditorService(private val context: Context) {
     private var llmInference: LlmInference? = null
     private val inferenceLock = Any()
     private val supportedModes = setOf("AUTO", "BALANCED", "FLOW", "RHYME")
+    private val minimumModelSizeBytes = 1L * 1024L * 1024L
 
     private val json = Json {
         isLenient = true
@@ -69,15 +70,7 @@ class LyricsEditorService(private val context: Context) {
             else -> File(path)
         }
 
-        if (!modelFile.exists()) {
-            throw IllegalArgumentException("Model file not found at: $modelFile")
-        }
-        if (modelFile.length() == 0L) {
-            throw IllegalArgumentException("Model file is empty: $modelFile")
-        }
-        if (!isSupportedModelFile(modelFile, uri.takeIf { isContentUriPath })) {
-            throw IllegalArgumentException("Unsupported model format. Expected .tflite file.")
-        }
+        validateModelFile(modelFile, uri.takeIf { isContentUriPath })
 
         setupInference(modelFile.absolutePath)
     }
@@ -86,6 +79,7 @@ class LyricsEditorService(private val context: Context) {
         val inputStream = context.contentResolver.openInputStream(uri)
             ?: throw IllegalArgumentException("Cannot open content URI: $uri")
         val extension = uri.lastPathSegment?.substringAfterLast('.', "bin") ?: "bin"
+        pruneImportedModelCache()
         val outputFile = File(context.cacheDir, "imported_model_${UUID.randomUUID()}.$extension")
 
         inputStream.use { input ->
@@ -94,6 +88,32 @@ class LyricsEditorService(private val context: Context) {
             }
         }
         return outputFile
+    }
+
+    private fun validateModelFile(modelFile: File, sourceUri: Uri?) {
+        if (!modelFile.exists()) {
+            throw IllegalArgumentException("Model file not found at: $modelFile")
+        }
+        if (modelFile.length() <= 0L) {
+            throw IllegalArgumentException("Model file is empty: $modelFile")
+        }
+        if (modelFile.length() < minimumModelSizeBytes) {
+            throw IllegalArgumentException("Model file is too small to be a valid LLM model: $modelFile")
+        }
+        if (!isSupportedModelFile(modelFile, sourceUri)) {
+            throw IllegalArgumentException("Unsupported model format. Expected .tflite file.")
+        }
+    }
+
+    private fun pruneImportedModelCache() {
+        val imported = context.cacheDir
+            .listFiles { file -> file.isFile && file.name.startsWith("imported_model_") }
+            ?.sortedByDescending { it.lastModified() }
+            ?: return
+
+        imported.drop(2).forEach { file ->
+            runCatching { file.delete() }
+        }
     }
 
     private fun isSupportedModelFile(modelFile: File, sourceUri: Uri?): Boolean {
@@ -180,5 +200,11 @@ class LyricsEditorService(private val context: Context) {
             runCatching { inference.close() }
         }
         llmInference = null
+    }
+
+    fun release() {
+        synchronized(inferenceLock) {
+            closeInferenceIfNeeded()
+        }
     }
 }
