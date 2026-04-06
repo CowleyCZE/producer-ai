@@ -149,9 +149,7 @@ body {
 
 .btn:focus {
   outline: none;
-  ring: 2px;
-  ring-offset: 2px;
-  ring-offset-color: var(--color-surface-900);
+  box-shadow: 0 0 0 2px var(--color-primary-500), 0 0 0 4px var(--color-surface-900);
 }
 
 .btn:disabled {
@@ -219,8 +217,7 @@ body {
 
 .input:focus {
   outline: none;
-  ring: 2px;
-  ring-color: var(--color-primary-500);
+  box-shadow: 0 0 0 2px var(--color-primary-500);
   border-color: transparent;
 }
 

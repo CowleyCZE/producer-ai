@@ -2,10 +2,11 @@ import React from 'react';
 import { useTheme } from '../theme/ThemeContext';
 
 export const ThemeSwitch: React.FC = () => {
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
 
   return (
     <button
+      type="button"
       onClick={toggleTheme}
       className="
         relative inline-flex h-10 w-20 items-center rounded-full
@@ -13,6 +14,7 @@ export const ThemeSwitch: React.FC = () => {
         hover:bg-surface-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-surface-900
       "
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+      aria-pressed={isDark}
     >
       <span
         className={`
@@ -23,6 +25,7 @@ export const ThemeSwitch: React.FC = () => {
       />
       <span className="relative flex h-full w-full items-center justify-between px-2">
         <span
+          aria-hidden="true"
           className={`
             text-xs transition-opacity duration-200
             ${isDark ? 'opacity-100' : 'opacity-40'}
@@ -31,6 +34,7 @@ export const ThemeSwitch: React.FC = () => {
           🌙
         </span>
         <span
+          aria-hidden="true"
           className={`
             text-xs transition-opacity duration-200
             ${!isDark ? 'opacity-100' : 'opacity-40'}

@@ -50,4 +50,24 @@ describe('LyricsInputPanel', () => {
 
     expect(setLyrics).toHaveBeenCalledWith('Krátký text');
   });
+
+  it('exposes textarea and selects via explicit labels', () => {
+    render(
+      <LyricsInputPanel
+        lyrics={'Makám celej den'}
+        setLyrics={vi.fn()}
+        style={StyleOption.BOOMBAP}
+        setStyle={vi.fn()}
+        energy={EnergyOption.MEDIUM}
+        setEnergy={vi.fn()}
+        modelReady={true}
+        onAnalyze={vi.fn()}
+        isAnalyzing={false}
+      />,
+    );
+
+    expect(screen.getByLabelText('Text skladby')).toBeInTheDocument();
+    expect(screen.getByLabelText('Styl')).toBeInTheDocument();
+    expect(screen.getByLabelText('Energie')).toBeInTheDocument();
+  });
 });

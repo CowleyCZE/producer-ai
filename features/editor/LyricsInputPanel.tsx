@@ -27,6 +27,10 @@ const LyricsInputPanel: React.FC<LyricsInputPanelProps> = ({
   isAnalyzing,
   status = '',
 }) => {
+  const lyricsTextareaId = 'lyrics-input-textarea';
+  const styleSelectId = 'lyrics-style-select';
+  const energySelectId = 'lyrics-energy-select';
+  const lineLimitHintId = 'lyrics-line-limit-hint';
   const lineCount = lyrics ? lyrics.split('\n').length : 0;
   const isOverLineLimit = lineCount > AI_ANALYZE_LINE_LIMIT;
   const canAnalyze = Boolean(lyrics.trim()) && modelReady && !isAnalyzing;
@@ -41,16 +45,21 @@ const LyricsInputPanel: React.FC<LyricsInputPanelProps> = ({
           </p>
         </div>
 
+        <label htmlFor={lyricsTextareaId} className="text-sm font-semibold text-surface-300">
+          Text skladby
+        </label>
         <textarea
+          id={lyricsTextareaId}
           value={lyrics}
           onChange={(event) => setLyrics(event.target.value)}
           placeholder={'Makám celej den, hlava plná stresu...\nKaždej další krok mě stojí další dech...'}
           className="input min-h-[360px] resize-y font-mono text-base leading-7 sm:min-h-[480px]"
           disabled={isAnalyzing}
+          aria-describedby={lineLimitHintId}
         />
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs uppercase tracking-[0.2em] text-surface-500">
+          <p id={lineLimitHintId} className="text-xs uppercase tracking-[0.2em] text-surface-500">
             {lineCount} řádků z doporučeného maxima {AI_ANALYZE_LINE_LIMIT}
           </p>
 
@@ -70,8 +79,9 @@ const LyricsInputPanel: React.FC<LyricsInputPanelProps> = ({
 
           <div className="mt-5 space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-surface-300">Styl</label>
+              <label htmlFor={styleSelectId} className="mb-2 block text-sm font-semibold text-surface-300">Styl</label>
               <select
+                id={styleSelectId}
                 value={style}
                 onChange={(event) => setStyle(event.target.value as StyleOption)}
                 className="input cursor-pointer"
@@ -86,8 +96,9 @@ const LyricsInputPanel: React.FC<LyricsInputPanelProps> = ({
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-surface-300">Energie</label>
+              <label htmlFor={energySelectId} className="mb-2 block text-sm font-semibold text-surface-300">Energie</label>
               <select
+                id={energySelectId}
                 value={energy}
                 onChange={(event) => setEnergy(event.target.value as EnergyOption)}
                 className="input cursor-pointer"
@@ -118,6 +129,7 @@ const LyricsInputPanel: React.FC<LyricsInputPanelProps> = ({
           ) : null}
 
           <button
+            type="button"
             onClick={onAnalyze}
             disabled={!canAnalyze}
             className="btn-primary w-full rounded-2xl px-6 py-4 text-base font-black tracking-wide disabled:cursor-not-allowed disabled:opacity-50"
