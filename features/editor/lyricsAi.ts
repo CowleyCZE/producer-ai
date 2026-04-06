@@ -499,7 +499,69 @@ function parseJSONResponse(responseText: string): unknown {
     jsonText = fencedMatch[1].trim();
   }
 
-  return JSON.parse(jsonText);
+  try {
+    return JSON.parse(jsonText);
+  } catch {
+    const extracted = extractLikelyJsonBlock(jsonText);
+    if (!extracted) {
+      throw new Error('Response does not contain parseable JSON');
+    }
+
+    return JSON.parse(extracted);
+  }
+}
+
+function extractLikelyJsonBlock(input: string): string | null {
+  const startIndex = input.search(/[\[{]/);
+  if (startIndex < 0) {
+    return null;
+  }
+
+  const opening = input[startIndex];
+  const closing = opening === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === opening) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return input.slice(startIndex, index + 1).trim();
+      }
+    }
+  }
+
+  return null;
 }
 
 function getAnalyzeSystemPrompt(): string {
@@ -1240,4 +1302,5 @@ export const __testing = {
   scoreLineStructure,
   preservesKeywords,
   validateConnectionProbeResponse,
+  parseJSONResponse,
 };

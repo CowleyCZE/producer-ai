@@ -206,6 +206,15 @@ describe('MVP core flow', () => {
     expect(regenerateSystemPrompt).not.toContain('vysvětlit, proč se má každý typ změnit');
   });
 
+  it('parses JSON even when model wraps it with extra text', () => {
+    const parsed = __testing.parseJSONResponse(
+      'Jasně, tady je výstup:\n{"lines":[{"line_index":0,"original":"A","needs_fix":false,"alternatives":null}]}\nHotovo.',
+    ) as { lines?: unknown[] };
+
+    expect(Array.isArray(parsed.lines)).toBe(true);
+    expect(parsed.lines).toHaveLength(1);
+  });
+
   it('validates the provider probe against the same JSON contract as analyze flow', () => {
     const isValid = __testing.validateConnectionProbeResponse(
       {

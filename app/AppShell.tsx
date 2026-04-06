@@ -138,6 +138,72 @@ interface AppDraft {
   lines: EditableLine[];
 }
 
+function isValidStyle(value: unknown): value is StyleOption {
+  return typeof value === 'string' && Object.values(StyleOption).includes(value as StyleOption);
+}
+
+function isValidEnergy(value: unknown): value is EnergyOption {
+  return typeof value === 'string' && Object.values(EnergyOption).includes(value as EnergyOption);
+}
+
+function isValidAppState(value: unknown): value is AppState {
+  return value === AppState.INPUT || value === AppState.RESULTS;
+}
+
+function isValidLineSelection(value: unknown): value is EditableLine['selectedOption'] {
+  return value === null || value === 'original' || value === 'balanced' || value === 'flow' || value === 'rhyme';
+}
+
+function isValidEditableLine(value: unknown): value is EditableLine {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const source = value as Partial<EditableLine>;
+  const hasCoreFields = (
+    typeof source.id === 'string'
+    && typeof source.original === 'string'
+    && typeof source.needsFix === 'boolean'
+    && isValidLineSelection(source.selectedOption)
+  );
+
+  if (!hasCoreFields) {
+    return false;
+  }
+
+  if (source.alternatives === null) {
+    return true;
+  }
+
+  if (!source.alternatives || typeof source.alternatives !== 'object') {
+    return false;
+  }
+
+  const alternatives = source.alternatives as EditableLine['alternatives'];
+  return Boolean(
+    alternatives
+    && typeof alternatives.balanced === 'string'
+    && typeof alternatives.flow === 'string'
+    && typeof alternatives.rhyme === 'string',
+  );
+}
+
+function isValidAppDraft(value: unknown): value is AppDraft {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const draft = value as Partial<AppDraft>;
+  return Boolean(
+    isValidAppState(draft.appState)
+    && typeof draft.lyrics === 'string'
+    && isValidStyle(draft.style)
+    && isValidEnergy(draft.energy)
+    && Array.isArray(draft.lines)
+    && draft.lines.every((line) => isValidEditableLine(line)),
+  );
+}
+
 function readDraft(): AppDraft | null {
   try {
     const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
@@ -145,7 +211,12 @@ function readDraft(): AppDraft | null {
       return null;
     }
 
-    return JSON.parse(raw) as AppDraft;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isValidAppDraft(parsed)) {
+      return null;
+    }
+
+    return parsed;
   } catch (error) {
     console.error('Failed to read draft:', error);
     return null;
@@ -169,3 +240,8 @@ function getInitialDraft(): AppDraft {
     lines: [],
   };
 }
+
+export const __testing = {
+  readDraft,
+  getInitialDraft,
+};

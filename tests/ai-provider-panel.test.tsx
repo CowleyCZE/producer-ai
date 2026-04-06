@@ -95,6 +95,27 @@ describe('AiProviderPanel', () => {
     expect(screen.getByText('✓ Ollama připravena')).toBeInTheDocument();
   });
 
+  it('keeps panel stable when Ollama model loading fails during initialization', async () => {
+    providerMocks.getProvider.mockReturnValue(ModelProvider.OLLAMA);
+    providerMocks.getProviderApiKey.mockReturnValue('');
+    providerMocks.getAvailableOllamaModels
+      .mockRejectedValueOnce(new Error('network failed'))
+      .mockResolvedValue([]);
+    const onStatusChange = vi.fn();
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel onStatusChange={onStatusChange} />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(onStatusChange).toHaveBeenCalledWith('not_loaded', 'Nastavení AI modelu');
+    });
+
+    expect(screen.getByText('Nastavení AI modelu')).toBeInTheDocument();
+  });
+
   it('loads available local models after switching to Ollama', async () => {
     render(
       <ToastProvider>

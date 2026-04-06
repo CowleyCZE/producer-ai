@@ -164,60 +164,70 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       return;
     }
 
-    void loadOllamaModels(true, getBaseUrlForProvider(ModelProvider.OLLAMA));
+    void loadOllamaModels(true, getBaseUrlForProvider(ModelProvider.OLLAMA)).catch((error) => {
+      console.error('Failed to load Ollama models after provider switch:', error);
+      setOllamaModels([]);
+    });
   }, [selectedProvider]);
 
   useEffect(() => {
     const initialize = async () => {
-      const savedProvider = getProvider();
-      setSelectedProvider(savedProvider);
-      hydrateProviderFields(savedProvider);
+      try {
+        const savedProvider = getProvider();
+        setSelectedProvider(savedProvider);
+        hydrateProviderFields(savedProvider);
 
-      if (savedProvider === ModelProvider.OLLAMA) {
-        const ollamaBaseUrl = getBaseUrlForProvider(ModelProvider.OLLAMA);
-        const models = await loadOllamaModels(true, ollamaBaseUrl);
-        if (models.length > 0) {
-          const storedModel = getModelForProvider(ModelProvider.OLLAMA);
-          const activeModel = models.includes(storedModel) ? storedModel : models[0];
-          const isValid = await testProviderConnection(ModelProvider.OLLAMA, {
-            modelName: activeModel,
-            baseUrl: ollamaBaseUrl,
-          });
-          if (!isValid) {
-            setIsExpanded(true);
-            setActiveProvider(null);
-            updateStatus('error', 'Ollama nedostupná');
-            return;
-          }
+        if (savedProvider === ModelProvider.OLLAMA) {
+          const ollamaBaseUrl = getBaseUrlForProvider(ModelProvider.OLLAMA);
+          const models = await loadOllamaModels(true, ollamaBaseUrl);
+          if (models.length > 0) {
+            const storedModel = getModelForProvider(ModelProvider.OLLAMA);
+            const activeModel = models.includes(storedModel) ? storedModel : models[0];
+            const isValid = await testProviderConnection(ModelProvider.OLLAMA, {
+              modelName: activeModel,
+              baseUrl: ollamaBaseUrl,
+            });
+            if (!isValid) {
+              setIsExpanded(true);
+              setActiveProvider(null);
+              updateStatus('error', 'Ollama nedostupná');
+              return;
+            }
 
-          setModelForProvider(ModelProvider.OLLAMA, activeModel);
-          setModelInput(activeModel);
-          setOllamaBaseUrlInput(ollamaBaseUrl);
-          setIsExpanded(false);
-          markProviderReady(ModelProvider.OLLAMA);
-          return;
-        }
-      }
-
-      if (REMOTE_PROVIDERS.has(savedProvider)) {
-        const apiKey = getProviderApiKey(savedProvider);
-        if (apiKey) {
-          const isValid = await testProviderConnection(savedProvider, {
-            apiKey,
-            modelName: getModelForProvider(savedProvider),
-          });
-
-          if (isValid) {
+            setModelForProvider(ModelProvider.OLLAMA, activeModel);
+            setModelInput(activeModel);
+            setOllamaBaseUrlInput(ollamaBaseUrl);
             setIsExpanded(false);
-            markProviderReady(savedProvider);
+            markProviderReady(ModelProvider.OLLAMA);
             return;
           }
         }
-      }
 
-      setActiveProvider(null);
-      setIsExpanded(true);
-      updateStatus('not_loaded', 'Nastavení AI modelu');
+        if (REMOTE_PROVIDERS.has(savedProvider)) {
+          const apiKey = getProviderApiKey(savedProvider);
+          if (apiKey) {
+            const isValid = await testProviderConnection(savedProvider, {
+              apiKey,
+              modelName: getModelForProvider(savedProvider),
+            });
+
+            if (isValid) {
+              setIsExpanded(false);
+              markProviderReady(savedProvider);
+              return;
+            }
+          }
+        }
+
+        setActiveProvider(null);
+        setIsExpanded(true);
+        updateStatus('not_loaded', 'Nastavení AI modelu');
+      } catch (error) {
+        console.error('Provider initialization failed:', error);
+        setActiveProvider(null);
+        setIsExpanded(true);
+        updateStatus('error', 'Nepodařilo se načíst konfiguraci AI backendu');
+      }
     };
 
     void initialize();
