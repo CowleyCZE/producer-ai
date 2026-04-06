@@ -39,7 +39,9 @@ describe('Toast behavior', () => {
     });
 
     expect(screen.getByRole('alert')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    expect(closeButton).toHaveAttribute('type', 'button');
+    fireEvent.click(closeButton);
 
     act(() => {
       vi.advanceTimersByTime(250);
@@ -63,5 +65,17 @@ describe('Toast behavior', () => {
     });
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('exposes live-region semantics for newly added toasts', () => {
+    render(
+      <ToastProvider>
+        <TriggerToast duration={0} />
+        <ToastViewport />
+      </ToastProvider>,
+    );
+
+    const liveRegion = document.querySelector('[aria-live="polite"]');
+    expect(liveRegion).toHaveAttribute('aria-live', 'polite');
   });
 });

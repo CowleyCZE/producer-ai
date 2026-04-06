@@ -5,6 +5,7 @@ import { useToast, Toast as ToastType, TOAST_ICONS, TOAST_COLORS } from '../toas
 const ToastItem: React.FC<{ toast: ToastType }> = ({ toast }) => {
   const { removeToast } = useToast();
   const [isExiting, setIsExiting] = useState(false);
+  const closeTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const duration = toast.duration ?? 4000;
@@ -32,8 +33,17 @@ const ToastItem: React.FC<{ toast: ToastType }> = ({ toast }) => {
       return;
     }
     setIsExiting(true);
-    setTimeout(() => removeToast(toast.id), 200);
+    closeTimeoutRef.current = setTimeout(() => removeToast(toast.id), 200);
   };
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+        closeTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -52,6 +62,7 @@ const ToastItem: React.FC<{ toast: ToastType }> = ({ toast }) => {
       <span className="text-lg flex-shrink-0">{TOAST_ICONS[toast.type]}</span>
       <p className="text-sm font-medium text-surface-100 flex-1">{toast.message}</p>
       <button
+        type="button"
         onClick={handleClose}
         className="text-surface-400 hover:text-surface-100 transition-colors p-1"
         aria-label="Close"
@@ -75,7 +86,12 @@ export const ToastViewport: React.FC = () => {
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+    <div
+      className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"
+      aria-live="polite"
+      aria-atomic="false"
+      aria-relevant="additions removals"
+    >
       {toasts.map((toast) => (
         <div key={toast.id} className="pointer-events-auto">
           <ToastItem toast={toast} />
