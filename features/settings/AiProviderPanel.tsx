@@ -111,6 +111,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [isLoadingOllamaModels, setIsLoadingOllamaModels] = useState(false);
   const hasHydratedRef = useRef(false);
+  const isMountedRef = useRef(true);
   const selectedProviderRef = useRef<ModelProvider>(selectedProvider);
   const ollamaLoadRequestRef = useRef(0);
   const { success, error: showError } = useToast();
@@ -152,15 +153,19 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
   const loadOllamaModels = async (preferStoredModel = true, baseUrl = ollamaBaseUrlInput): Promise<string[]> => {
     const requestId = ++ollamaLoadRequestRef.current;
+    if (!isMountedRef.current) {
+      return [];
+    }
     setIsLoadingOllamaModels(true);
 
     try {
       const models = Array.from(new Set(await getAvailableOllamaModels(baseUrl)));
-      const canApplyResult = (
+      const canApplyResult = isMountedRef.current;
+      const canApplyToCurrentProvider = (
         requestId === ollamaLoadRequestRef.current
         && selectedProviderRef.current === ModelProvider.OLLAMA
       );
-      if (!canApplyResult) {
+      if (!canApplyResult || !canApplyToCurrentProvider) {
         return models;
       }
 
@@ -179,11 +184,17 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
       return models;
     } finally {
-      if (requestId === ollamaLoadRequestRef.current) {
+      if (isMountedRef.current && requestId === ollamaLoadRequestRef.current) {
         setIsLoadingOllamaModels(false);
       }
     }
   };
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     selectedProviderRef.current = selectedProvider;
@@ -204,7 +215,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
     void loadOllamaModels(true, getBaseUrlForProvider(ModelProvider.OLLAMA)).catch((error) => {
       console.error('Failed to load Ollama models after provider switch:', error);
-      setOllamaModels([]);
+      if (isMountedRef.current && selectedProviderRef.current === ModelProvider.OLLAMA) {
+        setOllamaModels([]);
+      }
     });
   }, [selectedProvider]);
 
@@ -403,7 +416,8 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
   return (
     <div className="card border-surface-700 mb-6 overflow-hidden transition-all duration-300">
-      <div
+      <button
+        type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex cursor-pointer items-center justify-between bg-surface-950 p-4 select-none"
       >
@@ -423,7 +437,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
         <span className="text-surface-500 text-xl">
           {isExpanded ? '▲' : '▼'}
         </span>
-      </div>
+      </button>
 
       {isExpanded && (
         <div className="p-4 border-t border-surface-700 space-y-4">

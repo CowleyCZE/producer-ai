@@ -468,4 +468,56 @@ describe('AiProviderPanel', () => {
     expect(screen.getByLabelText('OpenAI API key')).toBeInTheDocument();
     expect(screen.getByLabelText('OpenAI model')).toBeInTheDocument();
   });
+
+  it('uses an accessible header button to collapse and expand provider settings', async () => {
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    const headerButton = screen.getByRole('button', { name: /AI Backend/i });
+    expect(headerButton).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Google Gemini/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Lokální Ollama/i })).toBeInTheDocument();
+
+    fireEvent.click(headerButton);
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Lokální Ollama/i })).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(headerButton);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Lokální Ollama/i })).toBeInTheDocument();
+    });
+  });
+
+  it('does not apply delayed Ollama errors after user switches to a different provider', async () => {
+    const modelsDeferred = deferred<string[]>();
+    providerMocks.getAvailableOllamaModels.mockReturnValue(modelsDeferred.promise);
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Backend')).toBeInTheDocument();
+    });
+
+    if (!screen.queryByRole('button', { name: /Lokální Ollama/i })) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Lokální Ollama/i }));
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI/i }));
+
+    modelsDeferred.reject(new Error('ollama failed late'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('OpenAI model')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/V telefonu jsem zatím nenašel žádný dostupný model/i)).not.toBeInTheDocument();
+  });
 });
