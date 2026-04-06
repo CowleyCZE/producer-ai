@@ -159,6 +159,9 @@ Výstup debug APK:
 - výsledek se mapuje zpět na původní řádky
 - pokud AI vrátí špatný JSON nebo slabé alternativy, UI nespadne a použije fallback
 - při vstupu nad 30 řádků se zpracuje jen prvních 30
+- prompt rozlišuje varianty `balanced`, `flow`, `rhyme` a hlídá klíčová slova (`panelák`, `makám`, `děti`)
+- heuristická metrika `scoreLineStructure` a `computeRhymeDensity` pomáhá vyhodit špatné náhrady a ukazuje se v editoru
+- detaily heuristiky jsou logované přes `logHeuristic` (console.debug) během vývoje; telemetry může tento výstup zachytit
 
 ## Směr produktu
 
