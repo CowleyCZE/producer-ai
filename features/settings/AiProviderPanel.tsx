@@ -114,9 +114,11 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   const isMountedRef = useRef(true);
   const selectedProviderRef = useRef<ModelProvider>(selectedProvider);
   const ollamaLoadRequestRef = useRef(0);
+  const connectRequestRef = useRef(0);
   const { success, error: showError } = useToast();
   const apiKeyInputId = `api-key-input-${selectedProvider}`;
   const modelInputId = `model-input-${selectedProvider}`;
+  const panelContentId = 'ai-provider-panel-content';
 
   const activeProviderMeta = PROVIDER_OPTIONS.find((option) => option.provider === selectedProvider) || PROVIDER_OPTIONS[0];
 
@@ -287,6 +289,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   }, [onStatusChange]);
 
   const handleConnect = async () => {
+    const connectRequestId = ++connectRequestRef.current;
     const provider = selectedProvider;
     const providerMeta = PROVIDER_OPTIONS.find((option) => option.provider === provider) || activeProviderMeta;
     const remoteProvider = REMOTE_PROVIDERS.has(provider);
@@ -315,6 +318,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
         }
 
         const models = await loadOllamaModels(false, trimmedBaseUrl);
+        if (!isMountedRef.current || connectRequestId !== connectRequestRef.current) {
+          return;
+        }
         if (!models.length) {
           throw new Error('Ollama not responding');
         }
@@ -324,6 +330,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
           modelName: nextModel,
           baseUrl: trimmedBaseUrl,
         });
+        if (!isMountedRef.current || connectRequestId !== connectRequestRef.current) {
+          return;
+        }
         if (!isValid) {
           throw new Error('Invalid API configuration');
         }
@@ -343,6 +352,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
         apiKey: effectiveApiKey,
         modelName: trimmedModel,
       });
+      if (!isMountedRef.current || connectRequestId !== connectRequestRef.current) {
+        return;
+      }
 
       if (!isValid) {
         throw new Error('Invalid API configuration');
@@ -358,6 +370,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       success(`${providerMeta.label} úspěšně připojena!`);
     } catch (error: any) {
       console.error(`${providerMeta.label} connection error:`, error);
+      if (!isMountedRef.current || connectRequestId !== connectRequestRef.current) {
+        return;
+      }
       if (!restoreActiveProviderStatus()) {
         updateStatus('error', `${providerMeta.label} nedostupná`);
       }
@@ -366,6 +381,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   };
 
   const handleDisconnect = () => {
+    connectRequestRef.current += 1;
     const providerToDisconnect = activeProvider || getProvider();
     if (REMOTE_PROVIDERS.has(providerToDisconnect)) {
       clearProviderApiKey(providerToDisconnect);
@@ -419,6 +435,8 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
+        aria-expanded={isExpanded}
+        aria-controls={panelContentId}
         className="flex cursor-pointer items-center justify-between bg-surface-950 p-4 select-none"
       >
         <div className="flex items-center gap-3">
@@ -440,7 +458,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       </button>
 
       {isExpanded && (
-        <div className="p-4 border-t border-surface-700 space-y-4">
+        <div id={panelContentId} className="p-4 border-t border-surface-700 space-y-4">
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {PROVIDER_OPTIONS.map((option) => (
               <button

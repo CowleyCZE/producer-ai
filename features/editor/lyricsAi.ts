@@ -16,6 +16,7 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const MAX_LINES = 30;
 const MAX_LINE_LENGTH_DELTA = 0.3;
+const MAX_SYLLABLE_DELTA = 2;
 const MIN_VARIANT_LENGTH = 3;
 const KEYWORDS_TO_PRESERVE = ['panelák', 'makám', 'děti'];
 const GEMINI_ENV_API_KEY_DISABLED_KEY = 'gemini_env_api_key_disabled';
@@ -1054,14 +1055,23 @@ function normalizeAlternatives(source: unknown, original: string): LineAlternati
   const originalLength = Math.max(original.trim().length, 1);
   const allValues = Object.values(normalized);
   const normalizedOriginal = normalizeCompareText(original);
+  const originalSyllables = countSyllables(original);
   const distinctNormalizedValues = new Set(allValues.map((value) => normalizeCompareText(value)).filter(Boolean));
   const hasEmptyValue = allValues.some((value) => !value);
   const tooShortValue = allValues.some((value) => value.length < MIN_VARIANT_LENGTH);
   const exceedsDelta = allValues.some((value) => Math.abs(value.length - originalLength) / originalLength > MAX_LINE_LENGTH_DELTA);
+  const exceedsSyllableDelta = allValues.some((value) => Math.abs(countSyllables(value) - originalSyllables) > MAX_SYLLABLE_DELTA);
   const matchesOriginalTooClosely = allValues.some((value) => normalizeCompareText(value) === normalizedOriginal);
   const hasDuplicateAlternatives = distinctNormalizedValues.size !== allValues.length;
 
-  if (hasEmptyValue || tooShortValue || exceedsDelta || matchesOriginalTooClosely || hasDuplicateAlternatives) {
+  if (
+    hasEmptyValue
+    || tooShortValue
+    || exceedsDelta
+    || exceedsSyllableDelta
+    || matchesOriginalTooClosely
+    || hasDuplicateAlternatives
+  ) {
     return null;
   }
 

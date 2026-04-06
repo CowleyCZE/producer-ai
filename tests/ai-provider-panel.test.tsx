@@ -478,18 +478,59 @@ describe('AiProviderPanel', () => {
 
     const headerButton = screen.getByRole('button', { name: /AI Backend/i });
     expect(headerButton).toBeInTheDocument();
+    expect(headerButton).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('button', { name: /Google Gemini/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Lokální Ollama/i })).toBeInTheDocument();
 
     fireEvent.click(headerButton);
     await waitFor(() => {
+      expect(headerButton).toHaveAttribute('aria-expanded', 'false');
       expect(screen.queryByRole('button', { name: /Lokální Ollama/i })).not.toBeInTheDocument();
     });
 
     fireEvent.click(headerButton);
     await waitFor(() => {
+      expect(headerButton).toHaveAttribute('aria-expanded', 'true');
       expect(screen.getByRole('button', { name: /Lokální Ollama/i })).toBeInTheDocument();
     });
+  });
+
+  it('ignores stale connect success when user disconnects while request is still pending', async () => {
+    const connectDeferred = deferred<boolean>();
+    providerMocks.testProviderConnection.mockImplementation((provider: ModelProvider) => (
+      provider === ModelProvider.GEMINI ? Promise.resolve(true) : connectDeferred.promise
+    ));
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Gemini API připravena')).toBeInTheDocument();
+    });
+
+    if (!screen.queryByRole('button', { name: /OpenAI/i })) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI/i }));
+    fireEvent.change(screen.getByPlaceholderText('Zadejte API key...'), {
+      target: { value: 'openai-key' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('gpt-4.1-mini'), {
+      target: { value: 'gpt-4.1-mini' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Připojit OpenAI/i }));
+    fireEvent.click(screen.getByTitle('Odpojit aktivní provider'));
+
+    connectDeferred.resolve(true);
+
+    await waitFor(() => {
+      expect(screen.getByText('AI odpojeno')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('✓ OpenAI připravena')).not.toBeInTheDocument();
   });
 
   it('does not apply delayed Ollama errors after user switches to a different provider', async () => {

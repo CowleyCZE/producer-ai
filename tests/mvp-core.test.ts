@@ -87,6 +87,19 @@ describe('MVP core flow', () => {
     expect(alternatives).toBeNull();
   });
 
+  it('rejects AI alternatives that violate the ±2 syllable contract', () => {
+    const alternatives = __testing.normalizeAlternatives(
+      {
+        balanced: 'Krk vlk smrk mrk',
+        flow: 'Prst krk smrt vrch',
+        rhyme: 'Vlk krk smrk prst',
+      },
+      'Aeiou aeiou aeiou',
+    );
+
+    expect(alternatives).toBeNull();
+  });
+
   it('falls back when alternatives are missing inside a line', () => {
     const result = __testing.normalizeAnalysisResponse(
       {
