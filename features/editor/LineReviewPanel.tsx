@@ -98,14 +98,16 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
       const alternatives = await regenerateLine(lines, lineId, { style, energy });
       setLines((currentLines) =>
         currentLines.map((line) =>
-          line.id === lineId
-            ? {
-                ...line,
-                needsFix: true,
-                alternatives,
-                selectedOption: null,
-              }
-            : line,
+          line.id !== lineId
+            ? line
+            : alternatives
+              ? {
+                  ...line,
+                  needsFix: true,
+                  alternatives,
+                  selectedOption: null,
+                }
+              : line,
         ),
       );
       if (alternatives) {
