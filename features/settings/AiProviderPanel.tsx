@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { setApiKey, hasApiKey, testApiKey, testOllama } from '../editor/lyricsAi';
+import { setApiKey, testApiKey, testGeminiKey, testOllama } from '../editor/lyricsAi';
 import { useToast } from '../../shared/toast/ToastContext';
 
 type ModelStatus = 'not_loaded' | 'loading' | 'loaded' | 'error' | 'testing' | 'ready';
@@ -25,22 +25,36 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   };
 
   useEffect(() => {
-    const savedProvider = localStorage.getItem('ai_provider');
-    const savedModel = localStorage.getItem('ollama_model');
-    
-    if (savedProvider === 'ollama') {
-      setSelectedProvider('ollama');
-      setModelName(savedModel || 'qwen2.5:3b');
-      setIsExpanded(false);
-      updateStatus('ready', '✓ Ollama připravena');
-    } else if (hasApiKey()) {
-      setModelName('gemini-2.0-flash-exp');
-      setIsExpanded(false);
-      updateStatus('ready', '✓ Gemini API připravena');
-    } else {
+    const initialize = async () => {
+      const savedProvider = localStorage.getItem('ai_provider');
+      const savedModel = localStorage.getItem('ollama_model');
+
+      if (savedProvider === 'ollama') {
+        setSelectedProvider('ollama');
+        setModelName(savedModel || 'qwen2.5:3b');
+        setIsExpanded(false);
+        updateStatus('ready', '✓ Ollama připravena');
+        return;
+      }
+
+      const storedKey = localStorage.getItem('gemini_api_key');
+      if (storedKey) {
+        const valid = await testGeminiKey(storedKey);
+        if (valid) {
+          setModelName('gemini-2.0-flash-exp');
+          setSelectedProvider('gemini');
+          setIsExpanded(false);
+          updateStatus('ready', '✓ Gemini API připravena');
+          return;
+        }
+        localStorage.removeItem('gemini_api_key');
+      }
+
       setIsExpanded(true);
       updateStatus('not_loaded', 'Nastavení AI modelu');
-    }
+    };
+
+    initialize();
   }, [onStatusChange]);
 
   const handleConnectGemini = async () => {
@@ -52,11 +66,11 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
     try {
       updateStatus('loading', 'Ověřuji Gemini API...');
       
-      setApiKey(apiKeyInput.trim());
-      
-      const isValid = await testApiKey();
-      
+      const candidateKey = apiKeyInput.trim();
+      const isValid = await testGeminiKey(candidateKey);
+
       if (isValid) {
+        setApiKey(candidateKey);
         setModelName('gemini-2.0-flash-exp');
         setSelectedProvider('gemini');
         setIsExpanded(false);

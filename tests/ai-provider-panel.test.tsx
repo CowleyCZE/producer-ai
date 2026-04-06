@@ -3,6 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AiProviderPanel from '../features/settings/AiProviderPanel';
 import { ToastProvider } from '../shared/toast/ToastContext';
 
+vi.mock('../features/editor/lyricsAi', async () => {
+  const actual = (await vi.importActual('../features/editor/lyricsAi')) as Record<string, unknown>;
+  return {
+    ...actual,
+    testGeminiKey: vi.fn().mockResolvedValue(true),
+  };
+});
+
 describe('AiProviderPanel', () => {
   beforeEach(() => {
     localStorage.clear();

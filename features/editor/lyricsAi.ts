@@ -130,12 +130,16 @@ export function isOllamaConnected(): boolean {
 }
 
 export async function testApiKey(): Promise<boolean> {
-  try {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if (!apiKey) {
-      return false;
-    }
+  const apiKey = localStorage.getItem('gemini_api_key');
+  if (!apiKey) {
+    return false;
+  }
 
+  return testGeminiKey(apiKey);
+}
+
+export async function testGeminiKey(apiKey: string): Promise<boolean> {
+  try {
     const testAI = new GoogleGenerativeAI(apiKey);
     const model = testAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent({
