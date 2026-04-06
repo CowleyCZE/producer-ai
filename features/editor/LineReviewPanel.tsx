@@ -188,7 +188,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
 
             <div className="flex flex-wrap items-center gap-3">
               {nextUnresolvedLineId ? (
-                <button onClick={handleJumpToNextUnresolved} className="btn-secondary rounded-xl px-4 py-2 text-sm">
+                <button type="button" onClick={handleJumpToNextUnresolved} className="btn-secondary rounded-xl px-4 py-2 text-sm">
                   Další nevyřešený
                 </button>
               ) : null}
@@ -203,7 +203,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                 Zobraz jen řádky k úpravě
               </label>
 
-              <button onClick={onBack} className="btn-ghost rounded-xl px-4 py-2 text-sm">
+              <button type="button" onClick={onBack} className="btn-ghost rounded-xl px-4 py-2 text-sm">
                 Zpět
               </button>
             </div>
@@ -245,7 +245,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                 </p>
               </div>
 
-              <button onClick={handleCopy} className="btn-primary rounded-2xl px-4 py-3 text-sm font-black">
+              <button type="button" onClick={handleCopy} className="btn-primary rounded-2xl px-4 py-3 text-sm font-black">
                 Kopírovat výsledek
               </button>
             </div>
@@ -259,6 +259,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
               <p className="mt-2 text-sm text-surface-300">{resolvedCount} rozhodnutých řádků z {problemLineCount}</p>
             </div>
             <button
+              type="button"
               onClick={() => setShowMobilePreview((current) => !current)}
               className="btn-secondary rounded-xl px-4 py-2 text-sm"
             >
@@ -271,7 +272,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
               <pre className="max-h-56 overflow-auto whitespace-pre-wrap font-mono text-sm leading-7 text-surface-200">
                 {assembledLyrics}
               </pre>
-              <button onClick={handleCopy} className="btn-primary mt-4 w-full rounded-2xl px-4 py-3 text-sm font-black">
+              <button type="button" onClick={handleCopy} className="btn-primary mt-4 w-full rounded-2xl px-4 py-3 text-sm font-black">
                 Kopírovat tento náhled
               </button>
             </div>
@@ -323,6 +324,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm font-semibold text-surface-300">Varianty</p>
                       <button
+                        type="button"
                         onClick={() => handleRegenerate(line.id)}
                         disabled={Boolean(regeneratingLineId)}
                         className="btn-ghost self-start rounded-xl px-3 py-2 text-sm sm:self-auto"
@@ -335,6 +337,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                       const isSelected = line.selectedOption === option;
                       return (
                         <button
+                          type="button"
                           key={option}
                           onClick={() => handleSelectOption(line.id, option)}
                           className={`block w-full rounded-2xl border p-4 text-left transition sm:p-5 ${
@@ -357,6 +360,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                     })}
 
                     <button
+                      type="button"
                       onClick={() => handleResetLine(line.id)}
                       className={`rounded-xl px-4 py-2 text-sm ${
                         originalSelected ? 'btn-primary' : 'btn-secondary'
@@ -373,6 +377,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                     </p>
                     <div className="mt-4 flex flex-wrap gap-3">
                       <button
+                        type="button"
                         onClick={() => handleRegenerate(line.id)}
                         disabled={Boolean(regeneratingLineId)}
                         className="btn-ghost rounded-xl px-3 py-2 text-sm"
@@ -380,6 +385,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
                         {isRegenerating ? 'Generuji...' : 'Zkus znovu'}
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleResetLine(line.id)}
                         className={`rounded-xl px-4 py-2 text-sm ${
                           originalSelected ? 'btn-primary' : 'btn-secondary'
@@ -429,12 +435,12 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
             {assembledLyrics}
           </pre>
 
-          <button onClick={handleCopy} className="btn-primary mt-5 w-full rounded-2xl px-4 py-3 text-sm font-black">
+          <button type="button" onClick={handleCopy} className="btn-primary mt-5 w-full rounded-2xl px-4 py-3 text-sm font-black">
             Kopírovat text
           </button>
 
           {nextUnresolvedLineId ? (
-            <button onClick={handleJumpToNextUnresolved} className="btn-secondary mt-3 w-full rounded-2xl px-4 py-3 text-sm font-semibold">
+            <button type="button" onClick={handleJumpToNextUnresolved} className="btn-secondary mt-3 w-full rounded-2xl px-4 py-3 text-sm font-semibold">
               Přejít na další nevyřešený řádek
             </button>
           ) : null}
@@ -450,15 +456,16 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
               </p>
             </div>
           <button
+            type="button"
             onClick={() => setShowMobilePreview((current) => !current)}
             className="btn-secondary min-w-24 rounded-xl px-4 py-3 text-sm"
           >
             {showMobilePreview ? 'Skrýt' : 'Náhled'}
           </button>
-          <button onClick={onBack} className="btn-ghost min-w-24 rounded-xl px-4 py-3 text-sm">
+          <button type="button" onClick={onBack} className="btn-ghost min-w-24 rounded-xl px-4 py-3 text-sm">
             Zpět
           </button>
-          <button onClick={handleCopy} className="btn-primary rounded-2xl px-4 py-3 text-sm font-black">
+          <button type="button" onClick={handleCopy} className="btn-primary rounded-2xl px-4 py-3 text-sm font-black">
             Kopírovat výsledek
           </button>
         </div>

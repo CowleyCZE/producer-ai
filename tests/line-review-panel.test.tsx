@@ -150,6 +150,25 @@ describe('LineReviewPanel', () => {
     expect(screen.getByRole('button', { name: 'Ponechat původní řádek' })).toBeInTheDocument();
   });
 
+  it('renders action buttons with explicit button type', () => {
+    renderPanel([
+      {
+        id: 'line-0',
+        original: 'Skaka pes přes oves',
+        needsFix: true,
+        alternatives: {
+          balanced: 'Skáče pes přes ten oves',
+          flow: 'Skáče pes, přes oves',
+          rhyme: 'Skáče pes přes oves, nese otisk do obce',
+        },
+        selectedOption: null,
+      },
+    ]);
+
+    expect(screen.getByRole('button', { name: 'Zkus znovu' })).toHaveAttribute('type', 'button');
+    expect(screen.getAllByRole('button', { name: 'Zpět' }).every((button) => button.getAttribute('type') === 'button')).toBe(true);
+  });
+
   it('ignores delayed regenerate result after the panel is unmounted', async () => {
     let resolveRegenerate!: (value: EditableLine['alternatives']) => void;
     lineReviewMocks.regenerateLine.mockReturnValue(

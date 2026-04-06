@@ -3,6 +3,8 @@ export interface DiffToken {
   changed: boolean;
 }
 
+const DIFF_COMPLEXITY_LIMIT = 10000;
+
 function tokenize(text: string): string[] {
   const matches = text.match(/(\s+|[^\s]+)/g);
   return matches || [];
@@ -11,6 +13,10 @@ function tokenize(text: string): string[] {
 export function diffText(baseText: string, nextText: string): DiffToken[] {
   const baseTokens = tokenize(baseText);
   const nextTokens = tokenize(nextText);
+  if (baseTokens.length * nextTokens.length > DIFF_COMPLEXITY_LIMIT) {
+    return nextTokens.map((value) => ({ value, changed: true }));
+  }
+
   const rows = baseTokens.length + 1;
   const columns = nextTokens.length + 1;
   const table: number[][] = Array.from({ length: rows }, () => Array<number>(columns).fill(0));

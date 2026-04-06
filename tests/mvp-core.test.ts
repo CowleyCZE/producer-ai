@@ -61,6 +61,17 @@ describe('MVP core flow', () => {
     expect(tokens.map((token) => token.value).join('')).toBe('Makám celej den, držím směr');
   });
 
+  it('falls back to linear diff mode for very large token matrices', () => {
+    const base = Array.from({ length: 101 }, (_, index) => `a${index}`).join(' ');
+    const next = Array.from({ length: 101 }, (_, index) => `b${index}`).join(' ');
+    const tokens = diffText(base, next);
+
+    const nonWhitespaceTokens = tokens.filter((token) => token.value.trim().length > 0);
+    expect(nonWhitespaceTokens).toHaveLength(101);
+    expect(nonWhitespaceTokens.every((token) => token.changed)).toBe(true);
+    expect(tokens.map((token) => token.value).join('')).toBe(next);
+  });
+
   it('rejects AI alternatives that only repeat the original line', () => {
     const alternatives = __testing.normalizeAlternatives(
       {
