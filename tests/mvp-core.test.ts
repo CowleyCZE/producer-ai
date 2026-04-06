@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { __testing, AI_ANALYZE_LINE_LIMIT, analyzeLyrics, assembleLyrics, semanticCache } from '../features/editor/lyricsAi';
+import {
+  __testing,
+  AI_ANALYZE_LINE_LIMIT,
+  analyzeLyrics,
+  assembleLyrics,
+  isLineResolved,
+  resolveLineText,
+  semanticCache,
+} from '../features/editor/lyricsAi';
 import { diffText } from '../features/editor/textDiff';
 import { EditableLine, EnergyOption, StyleOption } from '../features/editor/editorTypes';
 
@@ -27,6 +35,23 @@ describe('MVP core flow', () => {
     ];
 
     expect(assembleLyrics(lines)).toBe('Makám celej den, držím směr\nHlava plná stresu');
+  });
+
+  it('treats kept original lines as resolved decisions', () => {
+    const line: EditableLine = {
+      id: 'line-0',
+      original: 'Makám celej den',
+      needsFix: true,
+      alternatives: {
+        balanced: 'Makám celej den a držím směr',
+        flow: 'Makám celej den, držím směr',
+        rhyme: 'Makám celej den, tlak žene ven',
+      },
+      selectedOption: 'original',
+    };
+
+    expect(isLineResolved(line)).toBe(true);
+    expect(resolveLineText(line)).toBe('Makám celej den');
   });
 
   it('marks changed tokens in diff output', () => {
@@ -76,7 +101,7 @@ describe('MVP core flow', () => {
       'Krátký text',
     );
 
-    expect(result.lines[0]?.alternatives).not.toBeNull();
+    expect(result.lines[0]?.alternatives).toBeNull();
     expect(result.lines[0]?.needsFix).toBe(true);
   });
 
@@ -134,6 +159,79 @@ describe('MVP core flow', () => {
 
     expect(result.lines[0]?.original).toBe('Makám celej den');
     expect(result.lines[0]?.alternatives?.flow).toBe('Makám celej zas');
+  });
+
+  it('maps analysis lines by line_index even when AI returns them out of order', () => {
+    const result = __testing.normalizeAnalysisResponse(
+      {
+        lines: [
+          {
+            line_index: 1,
+            original: 'Druhej řádek drží tempo',
+            needs_fix: true,
+            alternatives: {
+              balanced: 'Druhej řádek drží směr',
+              flow: 'Druhej řádek tlačí vpřed',
+              rhyme: 'Druhej řádek pálí vpřed',
+            },
+          },
+          {
+            line_index: 0,
+            original: 'První řádek drží obraz',
+            needs_fix: false,
+            alternatives: null,
+          },
+        ],
+      },
+      'První řádek drží obraz\nDruhej řádek drží tempo',
+    );
+
+    expect(result.lines[0]?.original).toBe('První řádek drží obraz');
+    expect(result.lines[0]?.needsFix).toBe(false);
+    expect(result.lines[1]?.alternatives?.balanced).toBe('Druhej řádek drží směr');
+    expect(result.usedFallback).toBeUndefined();
+  });
+
+  it('builds prompts with explicit output contracts', () => {
+    const analyzeSystemPrompt = __testing.getAnalyzeSystemPrompt();
+    const analyzePrompt = __testing.buildAnalyzePrompt('První řádek\nDruhej řádek', {
+      style: StyleOption.BOOMBAP,
+      energy: EnergyOption.MEDIUM,
+    });
+    const regenerateSystemPrompt = __testing.getRegenerateSystemPrompt();
+
+    expect(analyzeSystemPrompt).toContain('"line_index"');
+    expect(analyzePrompt).toContain('stejné "line_index"');
+    expect(regenerateSystemPrompt).toContain('bez vysvětlení');
+    expect(regenerateSystemPrompt).not.toContain('vysvětlit, proč se má každý typ změnit');
+  });
+
+  it('validates the provider probe against the same JSON contract as analyze flow', () => {
+    const isValid = __testing.validateConnectionProbeResponse(
+      {
+        lines: [
+          {
+            line_index: 0,
+            original: 'Makám celej den',
+            needs_fix: false,
+            alternatives: null,
+          },
+          {
+            line_index: 1,
+            original: 'Hlava plná stresu',
+            needs_fix: true,
+            alternatives: {
+              balanced: 'Hlava plná tlaku',
+              flow: 'Hlava drží tlak',
+              rhyme: 'Hlava sbírá mrak',
+            },
+          },
+        ],
+      },
+      'Makám celej den\nHlava plná stresu',
+    );
+
+    expect(isValid).toBe(true);
   });
 
   it('falls back safely when AI payload does not contain lines', () => {

@@ -1,8 +1,10 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import {
   AnalysisResult,
+  DEFAULT_MODELS,
   EditableLine,
   EnergyOption,
+  LineSelection,
   LineAlternatives,
   ModelProvider,
   StyleOption,
@@ -10,6 +12,9 @@ import {
 
 const GEMINI_MODEL = 'gemini-2.0-flash-exp';
 const OLLAMA_BASE_URL = 'http://localhost:11434';
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const MAX_LINES = 30;
 const MAX_LINE_LENGTH_DELTA = 0.3;
 const MIN_VARIANT_LENGTH = 3;
@@ -26,6 +31,21 @@ interface AnalyzeOptions {
   style: StyleOption;
   energy: EnergyOption;
 }
+
+type OpenAiCompatibleProvider = ModelProvider.OPENAI | ModelProvider.OPENROUTER | ModelProvider.GROQ;
+
+interface RawAnalysisLine {
+  line_index?: unknown;
+  original?: unknown;
+  needs_fix?: unknown;
+  alternatives?: unknown;
+}
+
+const CONNECTION_PROBE_TEXT = ['Makám celej den', 'Hlava plná stresu'].join('\n');
+const CONNECTION_PROBE_OPTIONS: AnalyzeOptions = {
+  style: StyleOption.BOOMBAP,
+  energy: EnergyOption.MEDIUM,
+};
 
 class SemanticCache {
   private cache: Map<string, CacheEntry> = new Map();
@@ -83,32 +103,113 @@ const GENERATION_CONFIG = {
 };
 
 let genAI: GoogleGenerativeAI | null = null;
+let genAIKey: string | null = null;
+
+const API_KEY_STORAGE_KEYS: Partial<Record<ModelProvider, string>> = {
+  [ModelProvider.GEMINI]: 'gemini_api_key',
+  [ModelProvider.OPENAI]: 'openai_api_key',
+  [ModelProvider.OPENROUTER]: 'openrouter_api_key',
+  [ModelProvider.GROQ]: 'groq_api_key',
+};
+
+const MODEL_STORAGE_KEYS: Partial<Record<ModelProvider, string>> = {
+  [ModelProvider.GEMINI]: 'gemini_model',
+  [ModelProvider.OPENAI]: 'openai_model',
+  [ModelProvider.OPENROUTER]: 'openrouter_model',
+  [ModelProvider.GROQ]: 'groq_model',
+  [ModelProvider.OLLAMA]: 'ollama_model',
+};
+
+const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<ModelProvider, string>> = {
+  [ModelProvider.OPENAI]: OPENAI_BASE_URL,
+  [ModelProvider.OPENROUTER]: OPENROUTER_BASE_URL,
+  [ModelProvider.GROQ]: GROQ_BASE_URL,
+};
+
+const REMOTE_PROVIDER_SET = new Set<ModelProvider>([
+  ModelProvider.GEMINI,
+  ModelProvider.OPENAI,
+  ModelProvider.OPENROUTER,
+  ModelProvider.GROQ,
+]);
+
+function isKnownProvider(value: string | null): value is ModelProvider {
+  return Object.values(ModelProvider).includes(value as ModelProvider);
+}
+
+function getApiKeyStorageKey(provider: ModelProvider): string | null {
+  return API_KEY_STORAGE_KEYS[provider] || null;
+}
+
+function getModelStorageKey(provider: ModelProvider): string | null {
+  return MODEL_STORAGE_KEYS[provider] || null;
+}
+
+function getProviderDefaultModel(provider: ModelProvider): string {
+  return DEFAULT_MODELS[provider]?.modelName || GEMINI_MODEL;
+}
+
+export function getProviderApiKey(provider: ModelProvider): string | null {
+  if (provider === ModelProvider.GEMINI && import.meta.env.VITE_GEMINI_API_KEY) {
+    return import.meta.env.VITE_GEMINI_API_KEY;
+  }
+
+  const key = getApiKeyStorageKey(provider);
+  return key ? localStorage.getItem(key) : null;
+}
+
+export function setProviderApiKey(provider: ModelProvider, apiKey: string): void {
+  const key = getApiKeyStorageKey(provider);
+  if (!key) {
+    return;
+  }
+
+  localStorage.setItem(key, apiKey);
+  if (provider === ModelProvider.GEMINI) {
+    genAI = new GoogleGenerativeAI(apiKey);
+    genAIKey = apiKey;
+  }
+}
+
+export function clearProviderApiKey(provider: ModelProvider): void {
+  const key = getApiKeyStorageKey(provider);
+  if (!key) {
+    return;
+  }
+
+  localStorage.removeItem(key);
+  if (provider === ModelProvider.GEMINI) {
+    genAI = null;
+    genAIKey = null;
+  }
+}
 
 function getGenAI(): GoogleGenerativeAI {
-  if (!genAI) {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('gemini_api_key');
-    if (!apiKey) {
-      throw new Error('Gemini API key not configured');
-    }
+  const apiKey = getProviderApiKey(ModelProvider.GEMINI);
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured');
+  }
+
+  if (!genAI || genAIKey !== apiKey) {
     genAI = new GoogleGenerativeAI(apiKey);
+    genAIKey = apiKey;
   }
 
   return genAI;
 }
 
 export function setApiKey(apiKey: string): void {
-  localStorage.setItem('gemini_api_key', apiKey);
-  genAI = new GoogleGenerativeAI(apiKey);
+  setProviderApiKey(ModelProvider.GEMINI, apiKey);
 }
 
 export function hasApiKey(): boolean {
-  return Boolean(import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('gemini_api_key'));
+  return REMOTE_PROVIDER_SET.has(getProvider()) && Boolean(getProviderApiKey(getProvider()));
 }
 
 export function getProvider(): ModelProvider {
   const saved = localStorage.getItem('ai_provider');
-  if (saved === ModelProvider.OLLAMA) {
-    return ModelProvider.OLLAMA;
+  if (isKnownProvider(saved)) {
+    return saved;
   }
   return ModelProvider.GEMINI;
 }
@@ -117,12 +218,30 @@ export function setProvider(provider: ModelProvider): void {
   localStorage.setItem('ai_provider', provider);
 }
 
+export function getModelForProvider(provider: ModelProvider): string {
+  const storageKey = getModelStorageKey(provider);
+  if (!storageKey) {
+    return getProviderDefaultModel(provider);
+  }
+
+  return localStorage.getItem(storageKey) || getProviderDefaultModel(provider);
+}
+
+export function setModelForProvider(provider: ModelProvider, modelName: string): void {
+  const storageKey = getModelStorageKey(provider);
+  if (!storageKey) {
+    return;
+  }
+
+  localStorage.setItem(storageKey, modelName);
+}
+
 export function getOllamaModel(): string {
-  return localStorage.getItem('ollama_model') || 'qwen2.5:3b';
+  return getModelForProvider(ModelProvider.OLLAMA);
 }
 
 export function setOllamaModel(modelName: string): void {
-  localStorage.setItem('ollama_model', modelName);
+  setModelForProvider(ModelProvider.OLLAMA, modelName);
 }
 
 export function isOllamaConnected(): boolean {
@@ -130,31 +249,40 @@ export function isOllamaConnected(): boolean {
 }
 
 export async function testApiKey(): Promise<boolean> {
-  const apiKey = localStorage.getItem('gemini_api_key');
+  const provider = getProvider();
+  if (provider === ModelProvider.OLLAMA) {
+    return testOllama(getModelForProvider(ModelProvider.OLLAMA));
+  }
+
+  const apiKey = getProviderApiKey(provider);
   if (!apiKey) {
     return false;
   }
 
-  return testGeminiKey(apiKey);
+  return testProviderConnection(provider, { apiKey, modelName: getModelForProvider(provider) });
 }
 
-export async function testGeminiKey(apiKey: string): Promise<boolean> {
+export async function testGeminiKey(apiKey: string, modelName = getModelForProvider(ModelProvider.GEMINI)): Promise<boolean> {
   try {
-    const testAI = new GoogleGenerativeAI(apiKey);
-    const model = testAI.getGenerativeModel({ model: GEMINI_MODEL });
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
-      generationConfig: { maxOutputTokens: 10 },
-    });
-
-    return Boolean(result.response);
+    const responseText = await callGeminiWithConfig(
+      apiKey,
+      modelName || GEMINI_MODEL,
+      buildAnalyzePrompt(CONNECTION_PROBE_TEXT, CONNECTION_PROBE_OPTIONS),
+      getAnalyzeSystemPrompt(),
+      {
+        temperature: 0.2,
+        maxOutputTokens: 1024,
+      },
+    );
+    const parsed = parseJSONResponse(responseText);
+    return validateConnectionProbeResponse(parsed, CONNECTION_PROBE_TEXT);
   } catch (error) {
     console.error('API key test failed:', error);
     return false;
   }
 }
 
-export async function testOllama(): Promise<boolean> {
+export async function getAvailableOllamaModels(): Promise<string[]> {
   try {
     const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
       method: 'GET',
@@ -162,24 +290,102 @@ export async function testOllama(): Promise<boolean> {
     });
 
     if (!response.ok) {
-      return false;
+      return [];
     }
 
     const data = await response.json();
-    const models = data.models || [];
-    if (models.length === 0) {
-      return false;
-    }
-
-    const defaultModel = models.find((model: { name: string }) => model.name.includes('qwen')) || models[0];
-    if (defaultModel) {
-      setOllamaModel(defaultModel.name);
-    }
-
-    return true;
+    return (data.models || [])
+      .map((model: { name?: string }) => model?.name?.trim())
+      .filter((name: string | undefined): name is string => Boolean(name));
   } catch (error) {
     console.error('Ollama test failed:', error);
+    return [];
+  }
+}
+
+function pickDefaultOllamaModel(models: string[]): string | null {
+  if (!models.length) {
+    return null;
+  }
+
+  return models.find((model) => model.includes('qwen')) || models[0];
+}
+
+export async function testOllama(modelName = getOllamaModel()): Promise<boolean> {
+  const models = await getAvailableOllamaModels();
+  if (!models.length) {
     return false;
+  }
+
+  const requestedModel = modelName.trim();
+  const selectedModel = (requestedModel && models.includes(requestedModel) ? requestedModel : pickDefaultOllamaModel(models));
+  if (!selectedModel) {
+    return false;
+  }
+
+  try {
+    const responseText = await callOllamaWithConfig(
+      selectedModel,
+      buildAnalyzePrompt(CONNECTION_PROBE_TEXT, CONNECTION_PROBE_OPTIONS),
+      getAnalyzeSystemPrompt(),
+      {
+        temperature: 0.2,
+        numPredict: 1024,
+      },
+    );
+    const parsed = parseJSONResponse(responseText);
+    return validateConnectionProbeResponse(parsed, CONNECTION_PROBE_TEXT);
+  } catch (error) {
+    console.error('Ollama probe failed:', error);
+    return false;
+  }
+}
+
+async function testOpenAiCompatibleProvider(
+  provider: OpenAiCompatibleProvider,
+  apiKey: string,
+  modelName: string,
+): Promise<boolean> {
+  try {
+    const responseText = await callOpenAiCompatibleWithConfig(
+      provider,
+      apiKey,
+      modelName,
+      buildAnalyzePrompt(CONNECTION_PROBE_TEXT, CONNECTION_PROBE_OPTIONS),
+      getAnalyzeSystemPrompt(),
+      {
+        temperature: 0.2,
+        maxTokens: 1024,
+      },
+    );
+    const parsed = parseJSONResponse(responseText);
+    return validateConnectionProbeResponse(parsed, CONNECTION_PROBE_TEXT);
+  } catch (error) {
+    console.error('OpenAI-compatible provider test failed:', error);
+    return false;
+  }
+}
+
+export async function testProviderConnection(
+  provider: ModelProvider,
+  options: { apiKey?: string; modelName?: string } = {},
+): Promise<boolean> {
+  const modelName = options.modelName?.trim() || getModelForProvider(provider);
+
+  switch (provider) {
+    case ModelProvider.GEMINI:
+      return testGeminiKey(options.apiKey?.trim() || '', modelName);
+    case ModelProvider.OPENAI:
+    case ModelProvider.OPENROUTER:
+    case ModelProvider.GROQ:
+      if (!options.apiKey?.trim()) {
+        return false;
+      }
+      return testOpenAiCompatibleProvider(provider, options.apiKey.trim(), modelName);
+    case ModelProvider.OLLAMA:
+      return testOllama(modelName);
+    default:
+      return false;
   }
 }
 
@@ -215,6 +421,12 @@ Pravidla pro varianty:
 - rhyme varianta má přidat víc rýmů a zároveň zůstat přirozená
 - balanced varianta vrací nejpřirozenější výsledek, který těží z původního rytmu
 - pokud se řádek nemění, napiš "needs_fix: false" a "alternatives": null
+- v poli "lines" vrať přesně jeden objekt pro každý vstupní řádek
+- zachovej stejné pořadí jako na vstupu
+- "line_index" musí být stejné číslo jako u vstupu
+- "original" musí být přesně stejný text vstupního řádku bez úprav
+- nesmíš vynechat ani přidat žádný řádek
+- odpověz pouze JSONem bez komentářů, markdownu a doplňujícího textu
 
 Pro varianty detailně:
 - **balanced** zůstává co nejblíže originálu, ale lehce uhladí rytmus a vyhne se klišé
@@ -225,6 +437,7 @@ Výstup musí být STRICTNÍ JSON:
 {
   "lines": [
     {
+      "line_index": 0,
       "original": "text puvodniho radku",
       "needs_fix": true,
       "alternatives": {
@@ -252,17 +465,35 @@ Vrať přesně 3 varianty ve STRICTNÍM JSON:
 }
 
 Tvoje odpovědi musí:
-- vysvětlit, proč se má každý typ změnit (např. "Flow: zkrátit pauzy a natlačit přízvuky")
 - zachovat význam a přirozenost
 - držet délku ±2 slabiky
 - flow varianta zlepšuje rytmus a dynamiku
 - rhyme varianta přidává silnější nebo vícbarevné rýmy
-- balanced varianta zůstává nejvíc podobná originálu`;
+- balanced varianta zůstává nejvíc podobná originálu
+- odpověz pouze JSONem bez komentářů, bez markdownu a bez vysvětlení
+- hodnoty balanced, flow a rhyme musí být jen čistý text řádku, bez prefixů typu "Flow:" nebo dalších poznámek`;
+}
+
+function buildLinePayload(text: string): string {
+  const lines = text.split('\n').slice(0, MAX_LINES).map((original, line_index) => ({
+    line_index,
+    original,
+  }));
+
+  return JSON.stringify(lines, null, 2);
 }
 
 function buildAnalyzePrompt(text: string, options: AnalyzeOptions): string {
-  return `Text:
-${text}
+  const lineCount = text.split('\n').slice(0, MAX_LINES).length;
+
+  return `Řádky k analýze:
+${buildLinePayload(text)}
+
+Povinný kontrakt odpovědi:
+- v poli "lines" vrať přesně ${lineCount} objektů
+- každý objekt musí mít stejné "line_index" a stejné "original" jako odpovídající vstupní řádek
+- žádný vstupní řádek nesmí chybět a žádný nesmí být navíc
+- když řádek nepotřebuje úpravu, vrať "needs_fix": false a "alternatives": null
 
 Styl:
 ${options.style}
@@ -282,7 +513,10 @@ function buildRegeneratePrompt(text: string, line: EditableLine, options: Analyz
 ${text}
 
 Řádek k opravě:
-${line.original}
+${JSON.stringify({
+  line_index: Number.parseInt(line.id.replace('line-', ''), 10) || 0,
+  original: line.original,
+}, null, 2)}
 
 Styl:
 ${options.style}
@@ -291,19 +525,23 @@ Energie:
 ${options.energy}`;
 }
 
-async function callOllama(prompt: string, systemPrompt: string): Promise<string> {
-  const model = getOllamaModel();
+async function callOllamaWithConfig(
+  modelName: string,
+  prompt: string,
+  systemPrompt: string,
+  options: { temperature?: number; numPredict?: number } = {},
+): Promise<string> {
   const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model,
+      model: modelName,
       prompt: `${systemPrompt}\n\n${prompt}`,
       stream: false,
       format: 'json',
       options: {
-        temperature: 0.7,
-        num_predict: 2048,
+        temperature: options.temperature ?? 0.7,
+        num_predict: options.numPredict ?? 2048,
       },
     }),
   });
@@ -316,17 +554,119 @@ async function callOllama(prompt: string, systemPrompt: string): Promise<string>
   return data.response || '';
 }
 
-export async function callGemini(prompt: string, systemPrompt: string): Promise<string> {
-  const ai = getGenAI();
+async function callOllama(prompt: string, systemPrompt: string): Promise<string> {
+  return callOllamaWithConfig(getOllamaModel(), prompt, systemPrompt);
+}
+
+function extractOpenAiCompatibleText(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+          return part.text;
+        }
+        return '';
+      })
+      .join('')
+      .trim();
+  }
+
+  return '';
+}
+
+async function callOpenAiCompatibleWithConfig(
+  provider: OpenAiCompatibleProvider,
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  systemPrompt: string,
+  options: { temperature?: number; maxTokens?: number } = {},
+): Promise<string> {
+  if (!apiKey.trim()) {
+    throw new Error(`${provider} API key not configured`);
+  }
+
+  const baseUrl = OPENAI_COMPATIBLE_BASE_URLS[provider];
+  if (!baseUrl) {
+    throw new Error(`Missing base URL for provider: ${provider}`);
+  }
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelName,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      temperature: options.temperature ?? 0.7,
+      max_tokens: options.maxTokens ?? 2048,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`${provider} API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = extractOpenAiCompatibleText(data?.choices?.[0]?.message?.content);
+  if (!text) {
+    throw new Error(`No text in ${provider} response`);
+  }
+
+  return text;
+}
+
+async function callOpenAiCompatible(
+  provider: OpenAiCompatibleProvider,
+  prompt: string,
+  systemPrompt: string,
+): Promise<string> {
+  const apiKey = getProviderApiKey(provider);
+  if (!apiKey) {
+    throw new Error(`${provider} API key not configured`);
+  }
+
+  return callOpenAiCompatibleWithConfig(
+    provider,
+    apiKey,
+    getModelForProvider(provider),
+    prompt,
+    systemPrompt,
+  );
+}
+
+async function callGeminiWithConfig(
+  apiKey: string,
+  modelName: string,
+  prompt: string,
+  systemPrompt: string,
+  generationConfig: Partial<typeof GENERATION_CONFIG> = {},
+): Promise<string> {
+  const ai = new GoogleGenerativeAI(apiKey);
   const model = ai.getGenerativeModel({
-    model: GEMINI_MODEL,
+    model: modelName || GEMINI_MODEL,
     systemInstruction: systemPrompt,
     safetySettings: SAFETY_SETTINGS,
   });
 
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: GENERATION_CONFIG,
+    generationConfig: {
+      ...GENERATION_CONFIG,
+      ...generationConfig,
+    },
   });
 
   const response = result.response;
@@ -342,9 +682,33 @@ export async function callGemini(prompt: string, systemPrompt: string): Promise<
   return text;
 }
 
+export async function callGemini(prompt: string, systemPrompt: string): Promise<string> {
+  const apiKey = getProviderApiKey(ModelProvider.GEMINI);
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured');
+  }
+
+  return callGeminiWithConfig(
+    apiKey,
+    getModelForProvider(ModelProvider.GEMINI) || GEMINI_MODEL,
+    prompt,
+    systemPrompt,
+  );
+}
+
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
-  if (getProvider() === ModelProvider.OLLAMA) {
+  const provider = getProvider();
+
+  if (provider === ModelProvider.OLLAMA) {
     return callOllama(prompt, systemPrompt);
+  }
+
+  if (
+    provider === ModelProvider.OPENAI ||
+    provider === ModelProvider.OPENROUTER ||
+    provider === ModelProvider.GROQ
+  ) {
+    return callOpenAiCompatible(provider, prompt, systemPrompt);
   }
 
   return callGemini(prompt, systemPrompt);
@@ -370,6 +734,86 @@ function normalizeCompareText(value: string): string {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]/gu, '')
     .trim();
+}
+
+function isValidLineIndex(value: unknown, lineCount: number): value is number {
+  return Number.isInteger(value) && Number(value) >= 0 && Number(value) < lineCount;
+}
+
+function resolveAnalysisPayloadLines(
+  payloadLines: RawAnalysisLine[],
+  originalLines: string[],
+): { resolvedLines: Array<RawAnalysisLine | null>; usedRecovery: boolean } {
+  const resolvedLines: Array<RawAnalysisLine | null> = Array.from({ length: originalLines.length }, () => null);
+  const usedPayloadIndexes = new Set<number>();
+  let usedRecovery = payloadLines.length !== originalLines.length;
+
+  payloadLines.forEach((source, payloadIndex) => {
+    if (!isValidLineIndex(source.line_index, originalLines.length)) {
+      if (source.line_index !== undefined) {
+        usedRecovery = true;
+      }
+      return;
+    }
+
+    const lineIndex = Number(source.line_index);
+    if (resolvedLines[lineIndex]) {
+      usedRecovery = true;
+      return;
+    }
+
+    resolvedLines[lineIndex] = source;
+    usedPayloadIndexes.add(payloadIndex);
+  });
+
+  const byOriginal = new Map<string, Array<{ payloadIndex: number; source: RawAnalysisLine }>>();
+  payloadLines.forEach((source, payloadIndex) => {
+    if (usedPayloadIndexes.has(payloadIndex)) {
+      return;
+    }
+
+    const normalizedOriginal = typeof source.original === 'string' ? normalizeCompareText(source.original) : '';
+    if (!normalizedOriginal) {
+      return;
+    }
+
+    const existingQueue = byOriginal.get(normalizedOriginal) || [];
+    existingQueue.push({ payloadIndex, source });
+    byOriginal.set(normalizedOriginal, existingQueue);
+  });
+
+  originalLines.forEach((original, index) => {
+    if (resolvedLines[index]) {
+      return;
+    }
+
+    const queue = byOriginal.get(normalizeCompareText(original));
+    const nextMatch = queue?.shift();
+    if (!nextMatch) {
+      return;
+    }
+
+    resolvedLines[index] = nextMatch.source;
+    usedPayloadIndexes.add(nextMatch.payloadIndex);
+    usedRecovery = true;
+  });
+
+  payloadLines.forEach((source, payloadIndex) => {
+    if (usedPayloadIndexes.has(payloadIndex) || payloadIndex >= originalLines.length) {
+      if (payloadIndex >= originalLines.length) {
+        usedRecovery = true;
+      }
+      return;
+    }
+
+    if (!resolvedLines[payloadIndex]) {
+      resolvedLines[payloadIndex] = source;
+      usedPayloadIndexes.add(payloadIndex);
+      usedRecovery = true;
+    }
+  });
+
+  return { resolvedLines, usedRecovery };
 }
 
 function normalizeAlternatives(source: unknown, original: string): LineAlternatives | null {
@@ -406,6 +850,42 @@ function normalizeAlternatives(source: unknown, original: string): LineAlternati
   return normalized;
 }
 
+function validateConnectionProbeResponse(parsed: unknown, originalText: string): boolean {
+  const originalLines = originalText.split('\n');
+  const payload = parsed as { lines?: RawAnalysisLine[] };
+  if (!payload.lines || !Array.isArray(payload.lines) || payload.lines.length !== originalLines.length) {
+    return false;
+  }
+
+  const seenIndexes = new Set<number>();
+
+  return payload.lines.every((source) => {
+    if (!source || typeof source !== 'object') {
+      return false;
+    }
+
+    if (!isValidLineIndex(source.line_index, originalLines.length)) {
+      return false;
+    }
+
+    const lineIndex = Number(source.line_index);
+    if (seenIndexes.has(lineIndex)) {
+      return false;
+    }
+    seenIndexes.add(lineIndex);
+
+    if (source.original !== originalLines[lineIndex] || typeof source.needs_fix !== 'boolean') {
+      return false;
+    }
+
+    if (!source.needs_fix) {
+      return source.alternatives === null;
+    }
+
+    return Boolean(normalizeAlternatives(source.alternatives, source.original));
+  });
+}
+
 function preservesKeywords(original: string, alternatives: string[]): boolean {
   const normalizedOriginal = original.toLowerCase();
   for (const keyword of KEYWORDS_TO_PRESERVE) {
@@ -433,8 +913,7 @@ export function scoreLineStructure(line: EditableLine): number {
     return 100;
   }
   const originalLength = Math.max(line.original.trim().length, 1);
-  const selectedText =
-    line.selectedOption && line.alternatives ? line.alternatives[line.selectedOption] : line.original;
+  const selectedText = resolveLineText(line);
   const lengthDelta = Math.min(1, Math.abs(selectedText.length - originalLength) / originalLength);
   const rhythmScore = Math.max(0, 1 - lengthDelta);
   const naturalScore = Math.min(1, selectedText.length / Math.max(1, originalLength));
@@ -448,16 +927,8 @@ function logHeuristic(tag: string, payload: unknown): void {
   }
 }
 
-function fallbackAlternatives(original: string): LineAlternatives {
-  const trimmed = original.trim();
-  const words = trimmed.split(/\s+/).filter(Boolean);
-  const withoutLastWord = words.length > 3 ? words.slice(0, -1).join(' ') : trimmed;
-
-  return {
-    balanced: trimmed,
-    flow: withoutLastWord || trimmed,
-    rhyme: trimmed,
-  };
+function fallbackAlternatives(_original: string): null {
+  return null;
 }
 
 function needsHeuristicFix(line: string): boolean {
@@ -487,7 +958,7 @@ function createFallbackLines(text: string): EditableLine[] {
       id: `line-${index}`,
       original: line,
       needsFix,
-      alternatives: needsFix ? fallbackAlternatives(line) : null,
+      alternatives: null,
       selectedOption: null,
     };
   });
@@ -495,7 +966,7 @@ function createFallbackLines(text: string): EditableLine[] {
 
 function normalizeAnalysisResponse(parsed: unknown, originalText: string): AnalysisResult {
   const originalLines = originalText.split('\n').slice(0, MAX_LINES);
-  const payload = parsed as { lines?: Array<Record<string, unknown>> };
+  const payload = parsed as { lines?: RawAnalysisLine[] };
 
   if (!payload.lines || !Array.isArray(payload.lines)) {
     return {
@@ -505,8 +976,11 @@ function normalizeAnalysisResponse(parsed: unknown, originalText: string): Analy
     };
   }
 
+  const payloadLines = payload.lines.filter((line): line is RawAnalysisLine => Boolean(line) && typeof line === 'object');
+  const { resolvedLines: sourceLines, usedRecovery } = resolveAnalysisPayloadLines(payloadLines, originalLines);
+
   const normalizedLines = originalLines.map((fallbackOriginal, index) => {
-    const source = payload.lines?.[index];
+    const source = sourceLines[index];
     const original = fallbackOriginal;
     const aiNeedsFix = Boolean(source?.needs_fix);
     const heuristicNeedsFix = needsHeuristicFix(original);
@@ -517,7 +991,7 @@ function normalizeAnalysisResponse(parsed: unknown, originalText: string): Analy
       id: `line-${index}`,
       original,
       needsFix,
-      alternatives: needsFix ? (alternatives || fallbackAlternatives(original)) : null,
+      alternatives: needsFix ? alternatives : null,
       selectedOption: null,
     };
   });
@@ -532,7 +1006,7 @@ function normalizeAnalysisResponse(parsed: unknown, originalText: string): Analy
       return {
         ...line,
         needsFix: true,
-        alternatives: line.alternatives || fallbackAlternatives(line.original),
+        alternatives: line.alternatives,
       };
     });
 
@@ -540,21 +1014,42 @@ function normalizeAnalysisResponse(parsed: unknown, originalText: string): Analy
       return {
         lines: forcedLines,
         usedFallback: true,
-        fallbackMessage: 'AI označila vše jako bez problému, proto jsem zapnul základní heuristickou kontrolu.',
+        fallbackMessage: usedRecovery
+          ? 'AI nevrátila kompletní mapování řádků a zároveň neoznačila žádný problém, proto jsem výsledek dorovnal podle indexů/originálů a zapnul heuristickou kontrolu.'
+          : 'AI označila vše jako bez problému, proto jsem zapnul základní heuristickou kontrolu.',
       };
     }
+  }
+
+  if (usedRecovery) {
+    return {
+      lines: normalizedLines,
+      usedFallback: true,
+      fallbackMessage: 'AI nevrátila kompletní mapování řádků, proto jsem odpověď srovnal podle line_index/originálů a zbytek ponechal bez AI úprav.',
+    };
   }
 
   return { lines: normalizedLines };
 }
 
 export function assembleLyrics(lines: EditableLine[]): string {
-  return lines.map((line) => {
-    if (!line.alternatives || !line.selectedOption) {
-      return line.original;
-    }
-    return line.alternatives[line.selectedOption];
-  }).join('\n');
+  return lines.map((line) => resolveLineText(line)).join('\n');
+}
+
+export function resolveLineText(line: EditableLine): string {
+  if (!line.selectedOption || line.selectedOption === 'original' || !line.alternatives) {
+    return line.original;
+  }
+
+  return line.alternatives[line.selectedOption];
+}
+
+export function isLineResolved(line: EditableLine): boolean {
+  return !line.needsFix || line.selectedOption !== null;
+}
+
+export function isAlternativeSelection(selection: LineSelection | null): selection is keyof LineAlternatives {
+  return selection === 'balanced' || selection === 'flow' || selection === 'rhyme';
 }
 
 export async function analyzeLyrics(text: string, options: AnalyzeOptions): Promise<AnalysisResult> {
@@ -609,7 +1104,7 @@ export async function regenerateLine(
   allLines: EditableLine[],
   lineId: string,
   options: AnalyzeOptions,
-): Promise<LineAlternatives> {
+): Promise<LineAlternatives | null> {
   const line = allLines.find((entry) => entry.id === lineId);
   if (!line) {
     throw new Error('Řádek nebyl nalezen.');
@@ -624,17 +1119,22 @@ export async function regenerateLine(
     );
 
     const parsed = parseJSONResponse(responseText) as { alternatives?: unknown };
-    return normalizeAlternatives(parsed.alternatives, line.original) || fallbackAlternatives(line.original);
+    return normalizeAlternatives(parsed.alternatives, line.original);
   } catch (error) {
     console.error('Regenerate failed, using fallback:', error);
-    return fallbackAlternatives(line.original);
+    return null;
   }
 }
 
 export const __testing = {
+  buildAnalyzePrompt,
+  buildRegeneratePrompt,
+  getAnalyzeSystemPrompt,
+  getRegenerateSystemPrompt,
   normalizeAlternatives,
   normalizeAnalysisResponse,
   computeRhymeDensity,
   scoreLineStructure,
   preservesKeywords,
+  validateConnectionProbeResponse,
 };

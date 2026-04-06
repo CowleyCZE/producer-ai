@@ -1,22 +1,104 @@
-import React, { useState, useEffect } from 'react';
-import { setApiKey, testApiKey, testGeminiKey, testOllama } from '../editor/lyricsAi';
+import React, { useEffect, useState } from 'react';
+import { DEFAULT_MODELS, ModelProvider } from '../editor/editorTypes';
+import {
+  getAvailableOllamaModels,
+  getModelForProvider,
+  getProvider,
+  getProviderApiKey,
+  setModelForProvider,
+  setProvider,
+  setProviderApiKey,
+  testProviderConnection,
+} from '../editor/lyricsAi';
 import { useToast } from '../../shared/toast/ToastContext';
 
 type ModelStatus = 'not_loaded' | 'loading' | 'loaded' | 'error' | 'testing' | 'ready';
-type ModelProvider = 'gemini' | 'ollama';
 
 interface AiProviderPanelProps {
   onStatusChange?: (status: ModelStatus, message: string) => void;
 }
 
+interface ProviderMeta {
+  provider: ModelProvider;
+  label: string;
+  description: string;
+  apiKeyLabel?: string;
+  apiKeyUrl?: string;
+  connectLabel: string;
+  modelLabel: string;
+  modelHelp: string;
+}
+
+const PROVIDER_OPTIONS: ProviderMeta[] = [
+  {
+    provider: ModelProvider.GEMINI,
+    label: 'Google Gemini',
+    description: 'Google API key + Gemini model',
+    apiKeyLabel: 'Gemini API key',
+    apiKeyUrl: 'https://aistudio.google.com/app/apikey',
+    connectLabel: 'Připojit Gemini',
+    modelLabel: 'Gemini model',
+    modelHelp: 'Výchozí je rychlý model pro jedno-request analýzu textu.',
+  },
+  {
+    provider: ModelProvider.OPENAI,
+    label: 'OpenAI',
+    description: 'OpenAI API key + textový model',
+    apiKeyLabel: 'OpenAI API key',
+    apiKeyUrl: 'https://platform.openai.com/api-keys',
+    connectLabel: 'Připojit OpenAI',
+    modelLabel: 'OpenAI model',
+    modelHelp: 'Můžeš ponechat default nebo zadat vlastní model dostupný pod svým účtem.',
+  },
+  {
+    provider: ModelProvider.OPENROUTER,
+    label: 'OpenRouter',
+    description: 'OpenRouter API key + routed model',
+    apiKeyLabel: 'OpenRouter API key',
+    apiKeyUrl: 'https://openrouter.ai/keys',
+    connectLabel: 'Připojit OpenRouter',
+    modelLabel: 'OpenRouter model',
+    modelHelp: 'Použij název ve formátu provider/model, například openai/gpt-4.1-mini.',
+  },
+  {
+    provider: ModelProvider.GROQ,
+    label: 'Groq',
+    description: 'Groq API key + rychlý open model',
+    apiKeyLabel: 'Groq API key',
+    apiKeyUrl: 'https://console.groq.com/keys',
+    connectLabel: 'Připojit Groq',
+    modelLabel: 'Groq model',
+    modelHelp: 'Groq běží přes OpenAI-compatible endpoint, stačí klíč a model.',
+  },
+  {
+    provider: ModelProvider.OLLAMA,
+    label: 'Lokální Ollama',
+    description: 'Modely dostupné přímo v telefonu',
+    connectLabel: 'Připojit k Ollama',
+    modelLabel: 'Stažený Ollama model',
+    modelHelp: 'Po přepnutí se načte seznam modelů, které má lokální Ollama na zařízení.',
+  },
+];
+
+const REMOTE_PROVIDERS = new Set<ModelProvider>([
+  ModelProvider.GEMINI,
+  ModelProvider.OPENAI,
+  ModelProvider.OPENROUTER,
+  ModelProvider.GROQ,
+]);
+
 const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => {
   const [modelStatus, setModelStatus] = useState<ModelStatus>('not_loaded');
   const [statusMessage, setStatusMessage] = useState<string>('Nastavení AI modelu');
-  const [modelName, setModelName] = useState<string>('gemini-2.0-flash-exp');
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
-  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>('gemini');
+  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(getProvider());
   const [apiKeyInput, setApiKeyInput] = useState<string>('');
+  const [modelInput, setModelInput] = useState<string>(getModelForProvider(getProvider()));
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [isLoadingOllamaModels, setIsLoadingOllamaModels] = useState(false);
   const { success, error: showError } = useToast();
+
+  const activeProviderMeta = PROVIDER_OPTIONS.find((option) => option.provider === selectedProvider) || PROVIDER_OPTIONS[0];
 
   const updateStatus = (status: ModelStatus, message: string) => {
     setModelStatus(status);
@@ -24,114 +106,188 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
     onStatusChange?.(status, message);
   };
 
-  useEffect(() => {
-    const initialize = async () => {
-      const savedProvider = localStorage.getItem('ai_provider');
-      const savedModel = localStorage.getItem('ollama_model');
+  const hydrateProviderFields = (provider: ModelProvider) => {
+    setApiKeyInput(getProviderApiKey(provider) || '');
+    setModelInput(getModelForProvider(provider));
+  };
 
-      if (savedProvider === 'ollama') {
-        setSelectedProvider('ollama');
-        setModelName(savedModel || 'qwen2.5:3b');
-        setIsExpanded(false);
-        updateStatus('ready', '✓ Ollama připravena');
-        return;
+  const loadOllamaModels = async (preferStoredModel = true): Promise<string[]> => {
+    setIsLoadingOllamaModels(true);
+
+    try {
+      const models = Array.from(new Set(await getAvailableOllamaModels()));
+      setOllamaModels(models);
+
+      if (models.length > 0) {
+        const currentModel = modelInput.trim();
+        const storedModel = getModelForProvider(ModelProvider.OLLAMA);
+        const nextModel = (
+          (currentModel && models.includes(currentModel) && currentModel) ||
+          (preferStoredModel && models.includes(storedModel) ? storedModel : '') ||
+          models[0]
+        );
+        setModelInput(nextModel);
       }
 
-      const storedKey = localStorage.getItem('gemini_api_key');
-      if (storedKey) {
-        const valid = await testGeminiKey(storedKey);
-        if (valid) {
-          setModelName('gemini-2.0-flash-exp');
-          setSelectedProvider('gemini');
+      return models;
+    } finally {
+      setIsLoadingOllamaModels(false);
+    }
+  };
+
+  useEffect(() => {
+    hydrateProviderFields(selectedProvider);
+  }, [selectedProvider]);
+
+  useEffect(() => {
+    if (selectedProvider !== ModelProvider.OLLAMA) {
+      return;
+    }
+
+    void loadOllamaModels();
+  }, [selectedProvider]);
+
+  useEffect(() => {
+    const initialize = async () => {
+      const savedProvider = getProvider();
+      setSelectedProvider(savedProvider);
+      hydrateProviderFields(savedProvider);
+
+      if (savedProvider === ModelProvider.OLLAMA) {
+        const models = await loadOllamaModels();
+        if (models.length > 0) {
+          const storedModel = getModelForProvider(ModelProvider.OLLAMA);
+          const activeModel = models.includes(storedModel) ? storedModel : models[0];
+          const isValid = await testProviderConnection(ModelProvider.OLLAMA, { modelName: activeModel });
+          if (!isValid) {
+            setIsExpanded(true);
+            updateStatus('error', 'Ollama nedostupná');
+            return;
+          }
+
+          setModelForProvider(ModelProvider.OLLAMA, activeModel);
+          setModelInput(activeModel);
           setIsExpanded(false);
-          updateStatus('ready', '✓ Gemini API připravena');
+          updateStatus('ready', '✓ Ollama připravena');
           return;
         }
-        localStorage.removeItem('gemini_api_key');
+      }
+
+      if (REMOTE_PROVIDERS.has(savedProvider)) {
+        const apiKey = getProviderApiKey(savedProvider);
+        if (apiKey) {
+          const isValid = await testProviderConnection(savedProvider, {
+            apiKey,
+            modelName: getModelForProvider(savedProvider),
+          });
+
+          if (isValid) {
+            setIsExpanded(false);
+            updateStatus('ready', `✓ ${activeProviderLabel(savedProvider)} připravena`);
+            return;
+          }
+        }
       }
 
       setIsExpanded(true);
       updateStatus('not_loaded', 'Nastavení AI modelu');
     };
 
-    initialize();
+    void initialize();
   }, [onStatusChange]);
 
-  const handleConnectGemini = async () => {
-    if (!apiKeyInput.trim()) {
+  const handleConnect = async () => {
+    const provider = selectedProvider;
+    const remoteProvider = REMOTE_PROVIDERS.has(provider);
+    const trimmedApiKey = apiKeyInput.trim();
+    const trimmedModel = modelInput.trim() || DEFAULT_MODELS[provider].modelName;
+
+    if (remoteProvider && !trimmedApiKey) {
       showError('Prosím zadejte API klíč');
       return;
     }
-    
-    try {
-      updateStatus('loading', 'Ověřuji Gemini API...');
-      
-      const candidateKey = apiKeyInput.trim();
-      const isValid = await testGeminiKey(candidateKey);
 
-      if (isValid) {
-        setApiKey(candidateKey);
-        setModelName('gemini-2.0-flash-exp');
-        setSelectedProvider('gemini');
-        setIsExpanded(false);
-        updateStatus('ready', '✓ Gemini API připravena');
-        success('Gemini API úspěšně připojena!');
-        localStorage.setItem('ai_provider', 'gemini');
-      } else {
-        updateStatus('error', 'Neplatný API klíč');
-        showError('Neplatný API klíč. Zkontrolujte správnost.');
-      }
-    } catch (error: any) {
-      console.error('Gemini connection error:', error);
-      updateStatus('error', 'Chyba při připojování');
-      showError(`Nepodařilo se připojit: ${error.message}`);
-    }
-  };
-
-  const handleConnectOllama = async () => {
     try {
-      updateStatus('loading', 'Ověřuji dostupnost Ollama...');
-      
-      const isAvailable = await testOllama();
-      
-      if (isAvailable) {
-        const savedModel = localStorage.getItem('ollama_model');
-        setModelName(savedModel || 'qwen2.5:3b');
-        setSelectedProvider('ollama');
+      updateStatus('loading', `Ověřuji ${activeProviderMeta.label}...`);
+
+      if (provider === ModelProvider.OLLAMA) {
+        const models = await loadOllamaModels(false);
+        if (!models.length) {
+          throw new Error('Ollama not responding');
+        }
+
+        const nextModel = models.includes(trimmedModel) ? trimmedModel : models[0];
+        const isValid = await testProviderConnection(provider, { modelName: nextModel });
+        if (!isValid) {
+          throw new Error('Invalid API configuration');
+        }
+
+        setModelForProvider(provider, nextModel);
+        setProvider(provider);
+        setModelInput(nextModel);
         setIsExpanded(false);
         updateStatus('ready', '✓ Ollama připravena');
         success('Ollama úspěšně připojena!');
-        localStorage.setItem('ai_provider', 'ollama');
-      } else {
-        throw new Error('Ollama not responding');
+        return;
       }
+
+      const isValid = await testProviderConnection(provider, {
+        apiKey: trimmedApiKey,
+        modelName: trimmedModel,
+      });
+
+      if (!isValid) {
+        throw new Error('Invalid API configuration');
+      }
+
+      setProviderApiKey(provider, trimmedApiKey);
+      setModelForProvider(provider, trimmedModel);
+      setProvider(provider);
+      setIsExpanded(false);
+      updateStatus('ready', `✓ ${activeProviderLabel(provider)} připravena`);
+      success(`${activeProviderMeta.label} úspěšně připojena!`);
     } catch (error: any) {
-      console.error('Ollama connection error:', error);
-      updateStatus('error', 'Ollama nedostupná');
-      showError('Ollama není dostupná. Ujistěte se, že běží "ollama serve"');
+      console.error(`${activeProviderMeta.label} connection error:`, error);
+      updateStatus('error', `${activeProviderMeta.label} nedostupná`);
+      showError(buildConnectionErrorMessage(provider, error?.message));
     }
   };
 
   const handleDisconnect = () => {
-    localStorage.removeItem('gemini_api_key');
     localStorage.removeItem('ai_provider');
     setModelStatus('not_loaded');
     setStatusMessage('Nastavení AI modelu');
-    setApiKeyInput('');
-    setSelectedProvider('gemini');
     setIsExpanded(true);
     updateStatus('not_loaded', 'AI odpojeno');
-    success('AI odpojeno');
+    success('Aktivní AI backend odpojen');
+  };
+
+  const handleRefreshOllamaModels = async () => {
+    const models = await loadOllamaModels(false);
+    if (models.length > 0) {
+      success(`Načetl jsem ${models.length} Ollama modelů.`);
+      return;
+    }
+
+    showError('V Ollama teď není dostupný žádný stažený model.');
   };
 
   const getStatusColor = () => {
     switch (modelStatus) {
-      case 'ready': return 'text-success';
-      case 'loading': return 'text-warning animate-pulse';
-      case 'error': return 'text-error';
-      default: return 'text-surface-500';
+      case 'ready':
+        return 'text-success';
+      case 'loading':
+        return 'text-warning animate-pulse';
+      case 'error':
+        return 'text-error';
+      default:
+        return 'text-surface-500';
     }
   };
+
+  const showOllamaEmptyState = selectedProvider === ModelProvider.OLLAMA && !isLoadingOllamaModels && ollamaModels.length === 0;
+  const activeProviderName = modelStatus === 'ready' ? activeProviderMeta.label : null;
+  const activeModelName = modelStatus === 'ready' ? getModelForProvider(selectedProvider) : '';
 
   return (
     <div className="card border-surface-700 mb-6 overflow-hidden transition-all duration-300">
@@ -159,111 +315,143 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
       {isExpanded && (
         <div className="p-4 border-t border-surface-700 space-y-4">
-          <div className="mb-4 grid gap-2 sm:grid-cols-2">
-            <button
-              onClick={() => setSelectedProvider('gemini')}
-              className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
-                selectedProvider === 'gemini'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-              }`}
-            >
-              Google Gemini
-            </button>
-            <button
-              onClick={() => setSelectedProvider('ollama')}
-              className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
-                selectedProvider === 'ollama'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-              }`}
-            >
-              Lokální Ollama
-            </button>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {PROVIDER_OPTIONS.map((option) => (
+              <button
+                key={option.provider}
+                onClick={() => setSelectedProvider(option.provider)}
+                className={`rounded-lg px-4 py-3 text-left text-sm font-semibold transition-all ${
+                  selectedProvider === option.provider
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                }`}
+              >
+                <div>{option.label}</div>
+                <div className={`mt-1 text-xs ${selectedProvider === option.provider ? 'text-primary-100' : 'text-surface-500'}`}>
+                  {option.description}
+                </div>
+              </button>
+            ))}
           </div>
 
-          {selectedProvider === 'gemini' && (
-            <div className="space-y-3">
-              <div className="p-3 bg-surface-800 rounded-lg">
-                <span className="text-surface-400 text-sm">Model: </span>
-                <span className="text-surface-200 font-semibold">{modelName}</span>
-              </div>
-              
+          <div className="space-y-3 rounded-xl border border-surface-700 bg-surface-900/60 p-4">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold text-surface-100">{activeProviderMeta.label}</div>
+              <p className="text-xs text-surface-400">{activeProviderMeta.modelHelp}</p>
+            </div>
+
+            {REMOTE_PROVIDERS.has(selectedProvider) && (
               <div>
-                <label className="block text-xs font-semibold text-surface-400 mb-2">
-                  Gemini API Key
+                <label className="mb-2 block text-xs font-semibold text-surface-400">
+                  {activeProviderMeta.apiKeyLabel}
                 </label>
                 <input
                   type="password"
                   value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="Zadejte váš API key..."
+                  onChange={(event) => setApiKeyInput(event.target.value)}
+                  placeholder="Zadejte API key..."
                   className="input"
                 />
               </div>
-              
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <button
-                  onClick={handleConnectGemini}
-                  disabled={modelStatus === 'loading'}
-                  className="btn-primary flex-1"
-                >
-                  {modelStatus === 'loading' ? 'Ověřuji...' : 'Připojit Gemini API'}
-                </button>
-                
-                {modelStatus === 'ready' && (
+            )}
+
+            {selectedProvider === ModelProvider.OLLAMA ? (
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label className="block text-xs font-semibold text-surface-400">
+                    {activeProviderMeta.modelLabel}
+                  </label>
                   <button
-                    onClick={handleDisconnect}
-                    className="btn-ghost text-error"
-                    title="Odpojit"
+                    type="button"
+                    onClick={() => void handleRefreshOllamaModels()}
+                    disabled={isLoadingOllamaModels}
+                    className="text-xs font-semibold text-primary-300 transition hover:text-primary-200 disabled:cursor-not-allowed disabled:text-surface-500"
                   >
-                    ✕
+                    {isLoadingOllamaModels ? 'Načítám...' : 'Obnovit seznam'}
                   </button>
-                )}
+                </div>
+                <select
+                  value={modelInput}
+                  onChange={(event) => setModelInput(event.target.value)}
+                  className="input cursor-pointer"
+                  disabled={isLoadingOllamaModels || ollamaModels.length === 0}
+                >
+                  {ollamaModels.map((modelName) => (
+                    <option key={modelName} value={modelName}>
+                      {modelName}
+                    </option>
+                  ))}
+                </select>
+                {isLoadingOllamaModels ? (
+                  <p className="mt-2 text-xs text-surface-500">Načítám lokální Ollama modely...</p>
+                ) : null}
+                {showOllamaEmptyState ? (
+                  <p className="mt-2 text-xs text-warning">
+                    V telefonu jsem zatím nenašel žádný dostupný model. Zkontrolujte `ollama serve` a stažené modely.
+                  </p>
+                ) : null}
+                {ollamaModels.length > 0 ? (
+                  <p className="mt-2 text-xs text-surface-500">
+                    Vybrat můžeš kterýkoliv model, který je v Ollama stažený.
+                  </p>
+                ) : null}
               </div>
-
-              <p className="text-xs text-surface-500">
-                Získejte API key na: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" className="text-primary-400 hover:underline">aistudio.google.com</a>
-              </p>
-            </div>
-          )}
-
-          {selectedProvider === 'ollama' && (
-            <div className="space-y-3">
-              <div className="p-3 bg-surface-800 rounded-lg">
-                <span className="text-surface-400 text-sm">Model: </span>
-                <span className="text-surface-200 font-semibold">{modelName}</span>
+            ) : (
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-surface-400">
+                  {activeProviderMeta.modelLabel}
+                </label>
+                <input
+                  type="text"
+                  value={modelInput}
+                  onChange={(event) => setModelInput(event.target.value)}
+                  placeholder={DEFAULT_MODELS[selectedProvider].modelName}
+                  className="input"
+                />
               </div>
+            )}
 
-              <p className="rounded-lg border border-surface-700 bg-surface-900/60 px-3 py-2 text-sm text-surface-400">
-                Běží-li `ollama serve`, appka použije první dostupný doporučený model.
-              </p>
-              
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
               <button
-                onClick={handleConnectOllama}
+                onClick={handleConnect}
                 disabled={modelStatus === 'loading'}
-                className="btn-primary w-full"
+                className="btn-primary flex-1"
               >
-                {modelStatus === 'loading' ? 'Ověřuji...' : 'Připojit k Ollama'}
+                {modelStatus === 'loading' ? 'Ověřuji...' : activeProviderMeta.connectLabel}
               </button>
-              
-              <p className="text-xs text-surface-500 text-center">
-                Ujistěte se, že běží 'ollama serve'
-              </p>
-            </div>
-          )}
 
-          {modelStatus === 'ready' && (
+              {modelStatus === 'ready' && (
+                <button
+                  onClick={handleDisconnect}
+                  className="btn-ghost text-error"
+                  title="Odpojit aktivní provider"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {activeProviderMeta.apiKeyUrl ? (
+              <p className="text-xs text-surface-500">
+                API key získáte na:{' '}
+                <a href={activeProviderMeta.apiKeyUrl} target="_blank" rel="noopener" className="text-primary-400 hover:underline">
+                  {new URL(activeProviderMeta.apiKeyUrl).hostname}
+                </a>
+              </p>
+            ) : null}
+          </div>
+
+          {modelStatus === 'ready' && activeProviderName && (
             <div className="flex items-center gap-2 text-sm text-success">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-              <span>Aktivní: {selectedProvider === 'gemini' ? 'Google Gemini API' : 'Lokální Ollama'}</span>
+              <span>Aktivní: {activeProviderName}{activeModelName ? ` • ${activeModelName}` : ''}</span>
             </div>
           )}
 
           {modelStatus === 'error' && (
             <div className="flex items-center gap-2 text-sm text-error">
               <span className="w-2 h-2 rounded-full bg-error animate-pulse"></span>
-              <span> Chyba připojení - zkontrolujte API klíč</span>
+              <span>Chyba připojení. Zkontrolujte klíč, model nebo dostupnost lokální Ollama.</span>
             </div>
           )}
         </div>
@@ -271,5 +459,34 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
     </div>
   );
 };
+
+function activeProviderLabel(provider: ModelProvider): string {
+  switch (provider) {
+    case ModelProvider.GEMINI:
+      return 'Gemini API';
+    case ModelProvider.OPENAI:
+      return 'OpenAI';
+    case ModelProvider.OPENROUTER:
+      return 'OpenRouter';
+    case ModelProvider.GROQ:
+      return 'Groq';
+    case ModelProvider.OLLAMA:
+      return 'Ollama';
+    default:
+      return 'AI backend';
+  }
+}
+
+function buildConnectionErrorMessage(provider: ModelProvider, detail?: string): string {
+  if (provider === ModelProvider.OLLAMA) {
+    return 'Ollama není dostupná. Ujistěte se, že běží `ollama serve` a že je v telefonu stažený alespoň jeden model.';
+  }
+
+  if (detail === 'Invalid API configuration') {
+    return 'Nepodařilo se ověřit API klíč nebo model. Zkontrolujte hodnoty a zkuste to znovu.';
+  }
+
+  return 'Nepodařilo se připojit provider. Zkontrolujte API klíč, model a síťové připojení.';
+}
 
 export default AiProviderPanel;
