@@ -162,6 +162,7 @@ Výstup debug APK:
 - prompt rozlišuje varianty `balanced`, `flow`, `rhyme` a hlídá klíčová slova (`panelák`, `makám`, `děti`)
 - heuristická metrika `scoreLineStructure` a `computeRhymeDensity` pomáhá vyhodit špatné náhrady a ukazuje se v editoru
 - detaily heuristiky jsou logované přes `logHeuristic` (console.debug) během vývoje; telemetry může tento výstup zachytit
+- `testOllama` a `testGeminiKey` logují chyby do konzole (`console.error`), takže když server běží, lze přímo ve výstupu zjistit důvod, proč je Ollama připojení nevalidní
 
 ## Směr produktu
 
