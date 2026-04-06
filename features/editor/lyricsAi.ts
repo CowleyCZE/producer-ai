@@ -201,14 +201,6 @@ function setGeminiEnvApiKeyDisabled(disabled: boolean): void {
 }
 
 export function getProviderApiKey(provider: ModelProvider): string | null {
-  if (
-    provider === ModelProvider.GEMINI
-    && import.meta.env.VITE_GEMINI_API_KEY
-    && !isGeminiEnvApiKeyDisabled()
-  ) {
-    return import.meta.env.VITE_GEMINI_API_KEY;
-  }
-
   const cached = volatileApiKeyCache.get(provider);
   if (cached) {
     return cached;
@@ -223,8 +215,18 @@ export function getProviderApiKey(provider: ModelProvider): string | null {
   const sessionValue = storage?.getItem(key) || null;
   if (sessionValue) {
     volatileApiKeyCache.set(provider, sessionValue);
+    return sessionValue;
   }
-  return sessionValue;
+
+  if (
+    provider === ModelProvider.GEMINI
+    && import.meta.env.VITE_GEMINI_API_KEY
+    && !isGeminiEnvApiKeyDisabled()
+  ) {
+    return import.meta.env.VITE_GEMINI_API_KEY;
+  }
+
+  return null;
 }
 
 export function setProviderApiKey(provider: ModelProvider, apiKey: string): void {

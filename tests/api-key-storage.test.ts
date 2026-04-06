@@ -43,13 +43,13 @@ describe('API key storage', () => {
     expect(localStorage.setItem).toHaveBeenCalledWith('gemini_env_api_key_disabled', '1');
   });
 
-  it('re-enables Gemini env key after user sets a key again', () => {
+  it('prefers manually set Gemini key over env key after reconnect', () => {
     (import.meta.env as Record<string, string | undefined>)[GEMINI_ENV_KEY] = 'env-gemini-key';
     clearProviderApiKey(ModelProvider.GEMINI);
 
     setProviderApiKey(ModelProvider.GEMINI, 'manual-key');
 
     expect(localStorage.removeItem).toHaveBeenCalledWith('gemini_env_api_key_disabled');
-    expect(getProviderApiKey(ModelProvider.GEMINI)).toBe('env-gemini-key');
+    expect(getProviderApiKey(ModelProvider.GEMINI)).toBe('manual-key');
   });
 });
