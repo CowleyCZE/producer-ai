@@ -37,6 +37,9 @@ class LyricsEditorService(private val context: Context) {
     private val inferenceLock = Any()
     private val supportedModes = setOf("AUTO", "BALANCED", "FLOW", "RHYME")
     private val minimumModelSizeBytes = 1L * 1024L * 1024L
+    private val maxAnalyzeLines = 80
+    private val maxAnalyzeTextChars = 8000
+    private val maxContextChars = 2000
 
     private val json = Json {
         isLenient = true
@@ -48,6 +51,7 @@ class LyricsEditorService(private val context: Context) {
         if (llmInference != null) return@runCatching
         val modelName = "gemma-it-2b-int4.tflite"
         val modelFile = copyModelFromAssets(modelName)
+        validateModelFile(modelFile, null)
         setupInference(modelFile.absolutePath)
     }
 
@@ -130,16 +134,20 @@ class LyricsEditorService(private val context: Context) {
         if (mimeType.contains("tflite")) {
             return true
         }
+        if (mimeType.isNotEmpty() && mimeType != "application/octet-stream") {
+            return false
+        }
 
         // Some document providers omit original extension/type for binary files.
         return extension.isEmpty() || extension == "bin"
     }
 
     suspend fun analyzeLyrics(text: String, context: String, selectedMode: String): Result<EditorAnalysisResult> = runCatching {
-        val normalizedText = text.trim()
+        val normalizedText = normalizePromptText(text)
         if (normalizedText.isEmpty()) {
             return@runCatching EditorAnalysisResult(mode = "AUTO", segments = emptyList())
         }
+        val normalizedContext = context.trim().take(maxContextChars)
 
         val normalizedMode = selectedMode.trim().uppercase(Locale.ROOT).ifEmpty { "AUTO" }
         val effectiveMode = if (supportedModes.contains(normalizedMode)) normalizedMode else "AUTO"
@@ -153,7 +161,7 @@ class LyricsEditorService(private val context: Context) {
             INSTRUKCE: Vrať POUZE JSON podle zadaného schématu.
             ${generateAnalysisSchemaInstruction()}
 
-            KONTEXT: $context
+            KONTEXT: $normalizedContext
             $modeInstruction
 
             VSTUPNÍ TEXT K ANALÝZE:
@@ -193,6 +201,19 @@ class LyricsEditorService(private val context: Context) {
             }
         }
         return modelFile
+    }
+
+    private fun normalizePromptText(rawText: String): String {
+        if (rawText.isBlank()) {
+            return ""
+        }
+
+        val normalizedLines = rawText
+            .lineSequence()
+            .take(maxAnalyzeLines)
+            .joinToString("\n")
+
+        return normalizedLines.trim().take(maxAnalyzeTextChars)
     }
 
     private fun closeInferenceIfNeeded() {
