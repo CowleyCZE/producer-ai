@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { DEFAULT_MODELS, ModelProvider } from '../editor/editorTypes';
 import {
+  clearProviderApiKey,
+  getBaseUrlForProvider,
   getAvailableOllamaModels,
   getModelForProvider,
   getProvider,
   getProviderApiKey,
+  setBaseUrlForProvider,
   setModelForProvider,
   setProvider,
   setProviderApiKey,
@@ -91,9 +94,11 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   const [modelStatus, setModelStatus] = useState<ModelStatus>('not_loaded');
   const [statusMessage, setStatusMessage] = useState<string>('Nastavení AI modelu');
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [activeProvider, setActiveProvider] = useState<ModelProvider | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>(getProvider());
   const [apiKeyInput, setApiKeyInput] = useState<string>('');
   const [modelInput, setModelInput] = useState<string>(getModelForProvider(getProvider()));
+  const [ollamaBaseUrlInput, setOllamaBaseUrlInput] = useState<string>(getBaseUrlForProvider(ModelProvider.OLLAMA));
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [isLoadingOllamaModels, setIsLoadingOllamaModels] = useState(false);
   const { success, error: showError } = useToast();
@@ -106,16 +111,31 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
     onStatusChange?.(status, message);
   };
 
+  const markProviderReady = (provider: ModelProvider) => {
+    setActiveProvider(provider);
+    updateStatus('ready', `✓ ${activeProviderLabel(provider)} připravena`);
+  };
+
+  const restoreActiveProviderStatus = () => {
+    if (!activeProvider) {
+      return false;
+    }
+
+    updateStatus('ready', `✓ ${activeProviderLabel(activeProvider)} připravena`);
+    return true;
+  };
+
   const hydrateProviderFields = (provider: ModelProvider) => {
     setApiKeyInput(getProviderApiKey(provider) || '');
     setModelInput(getModelForProvider(provider));
+    setOllamaBaseUrlInput(getBaseUrlForProvider(ModelProvider.OLLAMA));
   };
 
-  const loadOllamaModels = async (preferStoredModel = true): Promise<string[]> => {
+  const loadOllamaModels = async (preferStoredModel = true, baseUrl = ollamaBaseUrlInput): Promise<string[]> => {
     setIsLoadingOllamaModels(true);
 
     try {
-      const models = Array.from(new Set(await getAvailableOllamaModels()));
+      const models = Array.from(new Set(await getAvailableOllamaModels(baseUrl)));
       setOllamaModels(models);
 
       if (models.length > 0) {
@@ -144,7 +164,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       return;
     }
 
-    void loadOllamaModels();
+    void loadOllamaModels(true, getBaseUrlForProvider(ModelProvider.OLLAMA));
   }, [selectedProvider]);
 
   useEffect(() => {
@@ -154,21 +174,27 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       hydrateProviderFields(savedProvider);
 
       if (savedProvider === ModelProvider.OLLAMA) {
-        const models = await loadOllamaModels();
+        const ollamaBaseUrl = getBaseUrlForProvider(ModelProvider.OLLAMA);
+        const models = await loadOllamaModels(true, ollamaBaseUrl);
         if (models.length > 0) {
           const storedModel = getModelForProvider(ModelProvider.OLLAMA);
           const activeModel = models.includes(storedModel) ? storedModel : models[0];
-          const isValid = await testProviderConnection(ModelProvider.OLLAMA, { modelName: activeModel });
+          const isValid = await testProviderConnection(ModelProvider.OLLAMA, {
+            modelName: activeModel,
+            baseUrl: ollamaBaseUrl,
+          });
           if (!isValid) {
             setIsExpanded(true);
+            setActiveProvider(null);
             updateStatus('error', 'Ollama nedostupná');
             return;
           }
 
           setModelForProvider(ModelProvider.OLLAMA, activeModel);
           setModelInput(activeModel);
+          setOllamaBaseUrlInput(ollamaBaseUrl);
           setIsExpanded(false);
-          updateStatus('ready', '✓ Ollama připravena');
+          markProviderReady(ModelProvider.OLLAMA);
           return;
         }
       }
@@ -183,12 +209,13 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
           if (isValid) {
             setIsExpanded(false);
-            updateStatus('ready', `✓ ${activeProviderLabel(savedProvider)} připravena`);
+            markProviderReady(savedProvider);
             return;
           }
         }
       }
 
+      setActiveProvider(null);
       setIsExpanded(true);
       updateStatus('not_loaded', 'Nastavení AI modelu');
     };
@@ -211,22 +238,34 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       updateStatus('loading', `Ověřuji ${activeProviderMeta.label}...`);
 
       if (provider === ModelProvider.OLLAMA) {
-        const models = await loadOllamaModels(false);
+        const trimmedBaseUrl = ollamaBaseUrlInput.trim();
+        if (!trimmedBaseUrl) {
+          showError('Zadejte URL lokálního Ollama serveru.');
+          updateStatus('not_loaded', 'Nastavení AI modelu');
+          return;
+        }
+
+        const models = await loadOllamaModels(false, trimmedBaseUrl);
         if (!models.length) {
           throw new Error('Ollama not responding');
         }
 
         const nextModel = models.includes(trimmedModel) ? trimmedModel : models[0];
-        const isValid = await testProviderConnection(provider, { modelName: nextModel });
+        const isValid = await testProviderConnection(provider, {
+          modelName: nextModel,
+          baseUrl: trimmedBaseUrl,
+        });
         if (!isValid) {
           throw new Error('Invalid API configuration');
         }
 
+        setBaseUrlForProvider(provider, trimmedBaseUrl);
         setModelForProvider(provider, nextModel);
         setProvider(provider);
         setModelInput(nextModel);
+        setOllamaBaseUrlInput(trimmedBaseUrl);
         setIsExpanded(false);
-        updateStatus('ready', '✓ Ollama připravena');
+        markProviderReady(provider);
         success('Ollama úspěšně připojena!');
         return;
       }
@@ -244,26 +283,41 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       setModelForProvider(provider, trimmedModel);
       setProvider(provider);
       setIsExpanded(false);
-      updateStatus('ready', `✓ ${activeProviderLabel(provider)} připravena`);
+      markProviderReady(provider);
       success(`${activeProviderMeta.label} úspěšně připojena!`);
     } catch (error: any) {
       console.error(`${activeProviderMeta.label} connection error:`, error);
-      updateStatus('error', `${activeProviderMeta.label} nedostupná`);
+      if (!restoreActiveProviderStatus()) {
+        updateStatus('error', `${activeProviderMeta.label} nedostupná`);
+      }
       showError(buildConnectionErrorMessage(provider, error?.message));
     }
   };
 
   const handleDisconnect = () => {
+    const activeProvider = getProvider();
+    if (REMOTE_PROVIDERS.has(activeProvider)) {
+      clearProviderApiKey(activeProvider);
+    }
+
     localStorage.removeItem('ai_provider');
     setModelStatus('not_loaded');
     setStatusMessage('Nastavení AI modelu');
     setIsExpanded(true);
+    setActiveProvider(null);
+    setApiKeyInput('');
     updateStatus('not_loaded', 'AI odpojeno');
     success('Aktivní AI backend odpojen');
   };
 
   const handleRefreshOllamaModels = async () => {
-    const models = await loadOllamaModels(false);
+    const trimmedBaseUrl = ollamaBaseUrlInput.trim();
+    if (!trimmedBaseUrl) {
+      showError('Zadejte URL lokálního Ollama serveru.');
+      return;
+    }
+
+    const models = await loadOllamaModels(false, trimmedBaseUrl);
     if (models.length > 0) {
       success(`Načetl jsem ${models.length} Ollama modelů.`);
       return;
@@ -286,8 +340,8 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   };
 
   const showOllamaEmptyState = selectedProvider === ModelProvider.OLLAMA && !isLoadingOllamaModels && ollamaModels.length === 0;
-  const activeProviderName = modelStatus === 'ready' ? activeProviderMeta.label : null;
-  const activeModelName = modelStatus === 'ready' ? getModelForProvider(selectedProvider) : '';
+  const activeProviderName = activeProvider ? PROVIDER_OPTIONS.find((option) => option.provider === activeProvider)?.label || activeProviderLabel(activeProvider) : null;
+  const activeModelName = activeProvider ? getModelForProvider(activeProvider) : '';
 
   return (
     <div className="card border-surface-700 mb-6 overflow-hidden transition-all duration-300">
@@ -352,11 +406,25 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
                   placeholder="Zadejte API key..."
                   className="input"
                 />
+                <p className="mt-2 text-xs text-surface-500">
+                  API klíč se ukládá jen do aktuální relace aplikace. Po zavření se znovu zadává.
+                </p>
               </div>
             )}
 
             {selectedProvider === ModelProvider.OLLAMA ? (
               <div>
+                <label htmlFor="ollama-base-url" className="mb-2 block text-xs font-semibold text-surface-400">
+                  URL Ollama serveru
+                </label>
+                <input
+                  id="ollama-base-url"
+                  type="text"
+                  value={ollamaBaseUrlInput}
+                  onChange={(event) => setOllamaBaseUrlInput(event.target.value)}
+                  placeholder={DEFAULT_MODELS[ModelProvider.OLLAMA].baseUrl}
+                  className="input mb-3"
+                />
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <label className="block text-xs font-semibold text-surface-400">
                     {activeProviderMeta.modelLabel}
@@ -395,6 +463,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
                     Vybrat můžeš kterýkoliv model, který je v Ollama stažený.
                   </p>
                 ) : null}
+                <p className="mt-2 text-xs text-surface-500">
+                  Pro telefon nebo jiný stroj sem můžeš zadat i síťovou adresu, například `http://192.168.1.10:11434`.
+                </p>
               </div>
             ) : (
               <div>
@@ -420,7 +491,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
                 {modelStatus === 'loading' ? 'Ověřuji...' : activeProviderMeta.connectLabel}
               </button>
 
-              {modelStatus === 'ready' && (
+              {activeProvider && (
                 <button
                   onClick={handleDisconnect}
                   className="btn-ghost text-error"
@@ -479,7 +550,7 @@ function activeProviderLabel(provider: ModelProvider): string {
 
 function buildConnectionErrorMessage(provider: ModelProvider, detail?: string): string {
   if (provider === ModelProvider.OLLAMA) {
-    return 'Ollama není dostupná. Ujistěte se, že běží `ollama serve` a že je v telefonu stažený alespoň jeden model.';
+    return 'Ollama není dostupná. Zkontrolujte URL serveru, běžící `ollama serve` a to, že je stažený alespoň jeden model.';
   }
 
   if (detail === 'Invalid API configuration') {

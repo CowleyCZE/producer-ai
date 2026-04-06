@@ -5,9 +5,12 @@ import { ModelProvider } from '../features/editor/editorTypes';
 import { ToastProvider } from '../shared/toast/ToastContext';
 
 const providerMocks = vi.hoisted(() => ({
+  clearProviderApiKey: vi.fn(),
+  getBaseUrlForProvider: vi.fn(),
   getProvider: vi.fn(),
   getProviderApiKey: vi.fn(),
   getModelForProvider: vi.fn(),
+  setBaseUrlForProvider: vi.fn(),
   testProviderConnection: vi.fn(),
   getAvailableOllamaModels: vi.fn(),
   setModelForProvider: vi.fn(),
@@ -19,9 +22,12 @@ vi.mock('../features/editor/lyricsAi', async () => {
   const actual = (await vi.importActual('../features/editor/lyricsAi')) as Record<string, unknown>;
   return {
     ...actual,
+    clearProviderApiKey: providerMocks.clearProviderApiKey,
+    getBaseUrlForProvider: providerMocks.getBaseUrlForProvider,
     getProvider: providerMocks.getProvider,
     getProviderApiKey: providerMocks.getProviderApiKey,
     getModelForProvider: providerMocks.getModelForProvider,
+    setBaseUrlForProvider: providerMocks.setBaseUrlForProvider,
     testProviderConnection: providerMocks.testProviderConnection,
     getAvailableOllamaModels: providerMocks.getAvailableOllamaModels,
     setModelForProvider: providerMocks.setModelForProvider,
@@ -35,6 +41,9 @@ describe('AiProviderPanel', () => {
     localStorage.clear();
     vi.clearAllMocks();
     providerMocks.getProvider.mockReturnValue(ModelProvider.GEMINI);
+    providerMocks.getBaseUrlForProvider.mockImplementation((provider: ModelProvider) => (
+      provider === ModelProvider.OLLAMA ? 'http://localhost:11434' : ''
+    ));
     providerMocks.getProviderApiKey.mockImplementation((provider: ModelProvider) => (
       provider === ModelProvider.GEMINI ? 'stored-key' : ''
     ));
@@ -109,6 +118,18 @@ describe('AiProviderPanel', () => {
     expect(screen.getByText(/Vybrat můžeš kterýkoliv model/i)).toBeInTheDocument();
   });
 
+  it('explains that remote API keys are stored only for the current session', async () => {
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/API klíč se ukládá jen do aktuální relace/i)).toBeInTheDocument();
+    });
+  });
+
   it('stores the exact Ollama model selected by the user', async () => {
     render(
       <ToastProvider>
@@ -132,5 +153,86 @@ describe('AiProviderPanel', () => {
     });
 
     expect(providerMocks.setProvider).toHaveBeenCalledWith(ModelProvider.OLLAMA);
+  });
+
+  it('stores the exact Ollama base URL selected by the user', async () => {
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Lokální Ollama')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('AI Backend'));
+    fireEvent.click(screen.getByRole('button', { name: /Lokální Ollama/i }));
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'URL Ollama serveru' }), {
+      target: { value: 'http://192.168.1.10:11434/' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Připojit k Ollama/i }));
+
+    await waitFor(() => {
+      expect(providerMocks.setBaseUrlForProvider).toHaveBeenCalledWith(
+        ModelProvider.OLLAMA,
+        'http://192.168.1.10:11434/',
+      );
+    });
+
+    expect(providerMocks.testProviderConnection).toHaveBeenCalledWith(
+      ModelProvider.OLLAMA,
+      expect.objectContaining({
+        baseUrl: 'http://192.168.1.10:11434/',
+      }),
+    );
+  });
+
+  it('keeps the active provider badge bound to the connected backend after switching tabs', async () => {
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Gemini API připravena')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('AI Backend'));
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI/i }));
+
+    expect(screen.getByText(/Aktivní: Google Gemini/)).toBeInTheDocument();
+    expect(screen.queryByText(/Aktivní: OpenAI/)).not.toBeInTheDocument();
+  });
+
+  it('preserves the current active provider when a switch attempt fails', async () => {
+    providerMocks.testProviderConnection.mockImplementation(async (provider: ModelProvider) => (
+      provider === ModelProvider.GEMINI
+    ));
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Gemini API připravena')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('AI Backend'));
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI/i }));
+    fireEvent.change(screen.getByPlaceholderText('Zadejte API key...'), {
+      target: { value: 'bad-openai-key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Připojit OpenAI/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Gemini API připravena')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Aktivní: Google Gemini/)).toBeInTheDocument();
   });
 });

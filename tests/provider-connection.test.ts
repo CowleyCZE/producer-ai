@@ -152,6 +152,54 @@ describe('Provider connection probes', () => {
     );
   });
 
+  it('uses the configured Ollama base URL instead of a hardcoded localhost endpoint', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          models: [{ name: 'qwen2.5:3b' }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          response: JSON.stringify({
+            lines: [
+              {
+                line_index: 0,
+                original: 'Makám celej den',
+                needs_fix: false,
+                alternatives: null,
+              },
+              {
+                line_index: 1,
+                original: 'Hlava plná stresu',
+                needs_fix: false,
+                alternatives: null,
+              },
+            ],
+          }),
+        }),
+      } as Response);
+
+    const isValid = await testProviderConnection(ModelProvider.OLLAMA, {
+      modelName: 'qwen2.5:3b',
+      baseUrl: 'http://192.168.1.10:11434/',
+    });
+
+    expect(isValid).toBe(true);
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://192.168.1.10:11434/api/tags',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      'http://192.168.1.10:11434/api/generate',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('requires Gemini to return valid analyze JSON during key verification', async () => {
     geminiMock.__mockGenerateContent.mockResolvedValueOnce({
       response: {

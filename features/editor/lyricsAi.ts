@@ -11,7 +11,6 @@ import {
 } from './editorTypes';
 
 const GEMINI_MODEL = 'gemini-2.0-flash-exp';
-const OLLAMA_BASE_URL = 'http://localhost:11434';
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
@@ -104,6 +103,7 @@ const GENERATION_CONFIG = {
 
 let genAI: GoogleGenerativeAI | null = null;
 let genAIKey: string | null = null;
+const volatileApiKeyCache = new Map<ModelProvider, string>();
 
 const API_KEY_STORAGE_KEYS: Partial<Record<ModelProvider, string>> = {
   [ModelProvider.GEMINI]: 'gemini_api_key',
@@ -118,6 +118,10 @@ const MODEL_STORAGE_KEYS: Partial<Record<ModelProvider, string>> = {
   [ModelProvider.OPENROUTER]: 'openrouter_model',
   [ModelProvider.GROQ]: 'groq_model',
   [ModelProvider.OLLAMA]: 'ollama_model',
+};
+
+const BASE_URL_STORAGE_KEYS: Partial<Record<ModelProvider, string>> = {
+  [ModelProvider.OLLAMA]: 'ollama_base_url',
 };
 
 const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<ModelProvider, string>> = {
@@ -149,13 +153,47 @@ function getProviderDefaultModel(provider: ModelProvider): string {
   return DEFAULT_MODELS[provider]?.modelName || GEMINI_MODEL;
 }
 
+function getProviderDefaultBaseUrl(provider: ModelProvider): string {
+  return DEFAULT_MODELS[provider]?.baseUrl || '';
+}
+
+function getBaseUrlStorageKey(provider: ModelProvider): string | null {
+  return BASE_URL_STORAGE_KEYS[provider] || null;
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.trim().replace(/\/+$/, '');
+}
+
+function getSessionStorageOrNull(): Storage | null {
+  try {
+    return typeof window !== 'undefined' ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getProviderApiKey(provider: ModelProvider): string | null {
   if (provider === ModelProvider.GEMINI && import.meta.env.VITE_GEMINI_API_KEY) {
     return import.meta.env.VITE_GEMINI_API_KEY;
   }
 
+  const cached = volatileApiKeyCache.get(provider);
+  if (cached) {
+    return cached;
+  }
+
   const key = getApiKeyStorageKey(provider);
-  return key ? localStorage.getItem(key) : null;
+  if (!key) {
+    return null;
+  }
+
+  const storage = getSessionStorageOrNull();
+  const sessionValue = storage?.getItem(key) || null;
+  if (sessionValue) {
+    volatileApiKeyCache.set(provider, sessionValue);
+  }
+  return sessionValue;
 }
 
 export function setProviderApiKey(provider: ModelProvider, apiKey: string): void {
@@ -164,7 +202,8 @@ export function setProviderApiKey(provider: ModelProvider, apiKey: string): void
     return;
   }
 
-  localStorage.setItem(key, apiKey);
+  volatileApiKeyCache.set(provider, apiKey);
+  getSessionStorageOrNull()?.setItem(key, apiKey);
   if (provider === ModelProvider.GEMINI) {
     genAI = new GoogleGenerativeAI(apiKey);
     genAIKey = apiKey;
@@ -177,7 +216,8 @@ export function clearProviderApiKey(provider: ModelProvider): void {
     return;
   }
 
-  localStorage.removeItem(key);
+  volatileApiKeyCache.delete(provider);
+  getSessionStorageOrNull()?.removeItem(key);
   if (provider === ModelProvider.GEMINI) {
     genAI = null;
     genAIKey = null;
@@ -236,12 +276,38 @@ export function setModelForProvider(provider: ModelProvider, modelName: string):
   localStorage.setItem(storageKey, modelName);
 }
 
+export function getBaseUrlForProvider(provider: ModelProvider): string {
+  const storageKey = getBaseUrlStorageKey(provider);
+  if (!storageKey) {
+    return getProviderDefaultBaseUrl(provider);
+  }
+
+  return normalizeBaseUrl(localStorage.getItem(storageKey) || getProviderDefaultBaseUrl(provider));
+}
+
+export function setBaseUrlForProvider(provider: ModelProvider, baseUrl: string): void {
+  const storageKey = getBaseUrlStorageKey(provider);
+  if (!storageKey) {
+    return;
+  }
+
+  localStorage.setItem(storageKey, normalizeBaseUrl(baseUrl) || getProviderDefaultBaseUrl(provider));
+}
+
 export function getOllamaModel(): string {
   return getModelForProvider(ModelProvider.OLLAMA);
 }
 
 export function setOllamaModel(modelName: string): void {
   setModelForProvider(ModelProvider.OLLAMA, modelName);
+}
+
+export function getOllamaBaseUrl(): string {
+  return getBaseUrlForProvider(ModelProvider.OLLAMA);
+}
+
+export function setOllamaBaseUrl(baseUrl: string): void {
+  setBaseUrlForProvider(ModelProvider.OLLAMA, baseUrl);
 }
 
 export function isOllamaConnected(): boolean {
@@ -251,7 +317,7 @@ export function isOllamaConnected(): boolean {
 export async function testApiKey(): Promise<boolean> {
   const provider = getProvider();
   if (provider === ModelProvider.OLLAMA) {
-    return testOllama(getModelForProvider(ModelProvider.OLLAMA));
+    return testOllama(getModelForProvider(ModelProvider.OLLAMA), getOllamaBaseUrl());
   }
 
   const apiKey = getProviderApiKey(provider);
@@ -282,9 +348,9 @@ export async function testGeminiKey(apiKey: string, modelName = getModelForProvi
   }
 }
 
-export async function getAvailableOllamaModels(): Promise<string[]> {
+export async function getAvailableOllamaModels(baseUrl = getOllamaBaseUrl()): Promise<string[]> {
   try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
+    const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/tags`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -311,8 +377,8 @@ function pickDefaultOllamaModel(models: string[]): string | null {
   return models.find((model) => model.includes('qwen')) || models[0];
 }
 
-export async function testOllama(modelName = getOllamaModel()): Promise<boolean> {
-  const models = await getAvailableOllamaModels();
+export async function testOllama(modelName = getOllamaModel(), baseUrl = getOllamaBaseUrl()): Promise<boolean> {
+  const models = await getAvailableOllamaModels(baseUrl);
   if (!models.length) {
     return false;
   }
@@ -326,6 +392,7 @@ export async function testOllama(modelName = getOllamaModel()): Promise<boolean>
   try {
     const responseText = await callOllamaWithConfig(
       selectedModel,
+      baseUrl,
       buildAnalyzePrompt(CONNECTION_PROBE_TEXT, CONNECTION_PROBE_OPTIONS),
       getAnalyzeSystemPrompt(),
       {
@@ -368,7 +435,7 @@ async function testOpenAiCompatibleProvider(
 
 export async function testProviderConnection(
   provider: ModelProvider,
-  options: { apiKey?: string; modelName?: string } = {},
+  options: { apiKey?: string; modelName?: string; baseUrl?: string } = {},
 ): Promise<boolean> {
   const modelName = options.modelName?.trim() || getModelForProvider(provider);
 
@@ -383,7 +450,7 @@ export async function testProviderConnection(
       }
       return testOpenAiCompatibleProvider(provider, options.apiKey.trim(), modelName);
     case ModelProvider.OLLAMA:
-      return testOllama(modelName);
+      return testOllama(modelName, options.baseUrl?.trim() || getOllamaBaseUrl());
     default:
       return false;
   }
@@ -527,11 +594,12 @@ ${options.energy}`;
 
 async function callOllamaWithConfig(
   modelName: string,
+  baseUrl: string,
   prompt: string,
   systemPrompt: string,
   options: { temperature?: number; numPredict?: number } = {},
 ): Promise<string> {
-  const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+  const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -555,7 +623,7 @@ async function callOllamaWithConfig(
 }
 
 async function callOllama(prompt: string, systemPrompt: string): Promise<string> {
-  return callOllamaWithConfig(getOllamaModel(), prompt, systemPrompt);
+  return callOllamaWithConfig(getOllamaModel(), getOllamaBaseUrl(), prompt, systemPrompt);
 }
 
 function extractOpenAiCompatibleText(content: unknown): string {

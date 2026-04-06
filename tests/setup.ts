@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 global.fetch = vi.fn();
 
 const mockStorage: Record<string, string> = {};
+const mockSessionStorage: Record<string, string> = {};
 global.localStorage = {
   getItem: vi.fn((key: string) => mockStorage[key] || null),
   setItem: vi.fn((key: string, value: string) => { mockStorage[key] = value; }),
@@ -11,6 +12,15 @@ global.localStorage = {
   clear: vi.fn(() => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]); }),
   key: vi.fn(),
   get length() { return Object.keys(mockStorage).length; }
+} as any;
+
+global.sessionStorage = {
+  getItem: vi.fn((key: string) => mockSessionStorage[key] || null),
+  setItem: vi.fn((key: string, value: string) => { mockSessionStorage[key] = value; }),
+  removeItem: vi.fn((key: string) => { delete mockSessionStorage[key]; }),
+  clear: vi.fn(() => { Object.keys(mockSessionStorage).forEach(key => delete mockSessionStorage[key]); }),
+  key: vi.fn(),
+  get length() { return Object.keys(mockSessionStorage).length; }
 } as any;
 
 Object.defineProperty(window, 'matchMedia', {
