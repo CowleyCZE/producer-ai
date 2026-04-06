@@ -12,6 +12,10 @@ const GEMINI_MODEL = 'gemini-2.0-flash-exp';
 const OLLAMA_BASE_URL = 'http://localhost:11434';
 const MAX_LINES = 30;
 const MAX_LINE_LENGTH_DELTA = 0.3;
+const MIN_VARIANT_LENGTH = 3;
+const KEYWORDS_TO_PRESERVE = ['panelák', 'makám', 'děti'];
+
+export const AI_ANALYZE_LINE_LIMIT = MAX_LINES;
 
 interface CacheEntry {
   result: AnalysisResult;
@@ -187,29 +191,31 @@ function parseJSONResponse(responseText: string): unknown {
 }
 
 function getAnalyzeSystemPrompt(): string {
-  return `Jsi profesionální český textař a rapový editor.
+  return `Jsi profesionální český textař a český rapový editor.
 
 Tvůj úkol:
 - analyzovat text po jednotlivých řádcích
-- identifikovat problematické části: slabé rýmy, špatný rytmus, klišé, nepřirozené formulace
-- nepřepisuj celý text
-- upravuj pouze problematické řádky
+- najít slabé rýmy, nesourodý rytmus, klišé nebo příliš generické formulace
+- nepřepisovat celý text, upravovat jen označené řádky
 
-Pro každý problematický řádek vytvoř přesně 3 alternativy:
-1. balanced
-2. flow
-3. rhyme
+Pro každý problémový řádek vrať přesně 3 varianty:
+1. **balanced** – nejbližší verze, která drží význam, rytmus i length
+2. **flow** – varianta se zlepšeným rytmem a průrazností bez ztráty obsahu
+3. **rhyme** – varianta se silnější rýmovou strukturou (multislabiční rýmy, asonance, konsonance)
 
-Pravidla:
-- zachovej význam původního textu
-- nepoužívej nesmyslná slova jen kvůli rýmu
-- zachovej přirozenou češtinu
-- respektuj styl rap / hip-hop
-- drž podobnou délku řádku kvůli flow
-- každý řádek musí mít podobný počet slabik jako originál, ideálně v toleranci +-2 slabiky
-- vyhýbej se základním rýmům typu den / sen / ven / jen / ten
-- preferuj přirozené multislabičné rýmy, asonanci a konsonanci
-- pokud je řádek rytmicky špatný, uprav strukturu věty, ne jen jedno slovo
+Pravidla pro varianty:
+- zachovej význam originálu
+- drž podobný počet slabik (±2)
+- nevracej slangové nebo generické rýmy jako den/sen/ven/jen/ten
+- flow varianta může upravit strukturu pro lepší těžiště akcentů
+- rhyme varianta má přidat víc rýmů a zároveň zůstat přirozená
+- balanced varianta vrací nejpřirozenější výsledek, který těží z původního rytmu
+- pokud se řádek nemění, napiš "needs_fix: false" a "alternatives": null
+
+Pro varianty detailně:
+- **balanced** zůstává co nejblíže originálu, ale lehce uhladí rytmus a vyhne se klišé
+- **flow** cíleně posouvá akcenty (kratší pauzy, lehčí spojky), aby řádek lépe seděl na beat
+- **rhyme** vytváří silnější rýmovou strukturu (multislabičná rýma, asonance, konsonance), ale zůstává přirozená
 
 Výstup musí být STRICTNÍ JSON:
 {
@@ -225,16 +231,13 @@ Výstup musí být STRICTNÍ JSON:
     }
   ]
 }
-
-Pokud řádek nepotřebuje úpravu:
-- "needs_fix": false
-- "alternatives": null`;
+`;
 }
 
 function getRegenerateSystemPrompt(): string {
-  return `Jsi profesionální český textař a rapový editor.
+  return `Jsi český rapový editor.
 
-Uživatel chce opravit jeden konkrétní řádek, ale musíš zachovat kontext celého textu.
+Uživatel chce opravit jeden konkrétní řádek, ale zachovej kontext celého textu.
 Vrať přesně 3 varianty ve STRICTNÍM JSON:
 {
   "alternatives": {
@@ -244,13 +247,13 @@ Vrať přesně 3 varianty ve STRICTNÍM JSON:
   }
 }
 
-Pravidla:
-- zachovej význam původního řádku
-- zachovej přirozenou češtinu
-- drž podobnou délku řádku
-- flow varianta má zlepšit rytmus
-- rhyme varianta má zlepšit rýmy
-- balanced varianta má být nejuniverzálnější`;
+Tvoje odpovědi musí:
+- vysvětlit, proč se má každý typ změnit (např. "Flow: zkrátit pauzy a natlačit přízvuky")
+- zachovat význam a přirozenost
+- držet délku ±2 slabiky
+- flow varianta zlepšuje rytmus a dynamiku
+- rhyme varianta přidává silnější nebo vícbarevné rýmy
+- balanced varianta zůstává nejvíc podobná originálu`;
 }
 
 function buildAnalyzePrompt(text: string, options: AnalyzeOptions): string {
@@ -352,7 +355,17 @@ function sanitizeAlternativeText(value: unknown): string {
     return '';
   }
 
-  return value.replace(/[^\p{L}\p{N}\p{P}\p{Zs}\n]/gu, '').trim();
+  return value
+    .replace(/[^\p{L}\p{N}\p{P}\p{Zs}\n]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeCompareText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .trim();
 }
 
 function normalizeAlternatives(source: unknown, original: string): LineAlternatives | null {
@@ -369,14 +382,66 @@ function normalizeAlternatives(source: unknown, original: string): LineAlternati
 
   const originalLength = Math.max(original.trim().length, 1);
   const allValues = Object.values(normalized);
+  const normalizedOriginal = normalizeCompareText(original);
+  const distinctNormalizedValues = new Set(allValues.map((value) => normalizeCompareText(value)).filter(Boolean));
   const hasEmptyValue = allValues.some((value) => !value);
+  const tooShortValue = allValues.some((value) => value.length < MIN_VARIANT_LENGTH);
   const exceedsDelta = allValues.some((value) => Math.abs(value.length - originalLength) / originalLength > MAX_LINE_LENGTH_DELTA);
+  const matchesOriginalTooClosely = allValues.some((value) => normalizeCompareText(value) === normalizedOriginal);
+  const hasDuplicateAlternatives = distinctNormalizedValues.size !== allValues.length;
 
-  if (hasEmptyValue || exceedsDelta) {
+  if (hasEmptyValue || tooShortValue || exceedsDelta || matchesOriginalTooClosely || hasDuplicateAlternatives) {
+    return null;
+  }
+
+  if (!preservesKeywords(original, allValues)) {
+    logHeuristic('keyword', { original, allValues });
     return null;
   }
 
   return normalized;
+}
+
+function preservesKeywords(original: string, alternatives: string[]): boolean {
+  const normalizedOriginal = original.toLowerCase();
+  for (const keyword of KEYWORDS_TO_PRESERVE) {
+    if (!normalizedOriginal.includes(keyword)) {
+      continue;
+    }
+    if (!alternatives.some((value) => value.toLowerCase().includes(keyword))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function computeRhymeDensity(lines: string[]): number {
+  if (!lines.length) {
+    return 0;
+  }
+  const endings = lines.map((line) => (line.trim().split(/\s+/).pop() || '').toLowerCase());
+  const rhymed = endings.filter((ending, idx) => idx > 0 && ending && endings[idx - 1] === ending).length;
+  return Math.min(1, rhymed / Math.max(1, lines.length - 1));
+}
+
+export function scoreLineStructure(line: EditableLine): number {
+  if (!line.needsFix) {
+    return 100;
+  }
+  const originalLength = Math.max(line.original.trim().length, 1);
+  const selectedText =
+    line.selectedOption && line.alternatives ? line.alternatives[line.selectedOption] : line.original;
+  const lengthDelta = Math.min(1, Math.abs(selectedText.length - originalLength) / originalLength);
+  const rhythmScore = Math.max(0, 1 - lengthDelta);
+  const naturalScore = Math.min(1, selectedText.length / Math.max(1, originalLength));
+  const rhymeScore = /[aeiouyáéíóúůýě]+$/.test(selectedText) ? 1 : 0.6;
+  return Math.round((rhythmScore * 0.45 + naturalScore * 0.25 + rhymeScore * 0.3) * 100);
+}
+
+function logHeuristic(tag: string, payload: unknown): void {
+  if (process.env.NODE_ENV !== 'test') {
+    console.debug(`[heuristic:${tag}]`, payload);
+  }
 }
 
 function fallbackAlternatives(original: string): LineAlternatives {
@@ -438,8 +503,7 @@ function normalizeAnalysisResponse(parsed: unknown, originalText: string): Analy
 
   const normalizedLines = originalLines.map((fallbackOriginal, index) => {
     const source = payload.lines?.[index];
-    const aiOriginal = typeof source?.original === 'string' ? source.original : fallbackOriginal;
-    const original = aiOriginal || fallbackOriginal;
+    const original = fallbackOriginal;
     const aiNeedsFix = Boolean(source?.needs_fix);
     const heuristicNeedsFix = needsHeuristicFix(original);
     const alternatives = normalizeAlternatives(source?.alternatives, original);
@@ -495,10 +559,20 @@ export async function analyzeLyrics(text: string, options: AnalyzeOptions): Prom
     return { lines: [] };
   }
 
+  const originalLineCount = text.split('\n').length;
   const limitedText = text.split('\n').slice(0, MAX_LINES).join('\n');
+  const wasTruncated = originalLineCount > MAX_LINES;
   const cached = semanticCache.get(limitedText, options.style, options.energy);
   if (cached) {
-    return cached;
+    if (!wasTruncated) {
+      return cached;
+    }
+
+    return {
+      ...cached,
+      usedFallback: true,
+      fallbackMessage: `Text je delší než ${MAX_LINES} řádků, proto jsem zpracoval jen prvních ${MAX_LINES}.`,
+    };
   }
 
   try {
@@ -506,14 +580,23 @@ export async function analyzeLyrics(text: string, options: AnalyzeOptions): Prom
     const responseText = await callAI(prompt, getAnalyzeSystemPrompt());
     const parsed = parseJSONResponse(responseText);
     const result = normalizeAnalysisResponse(parsed, limitedText);
+    const finalResult = wasTruncated
+      ? {
+          ...result,
+          usedFallback: true,
+          fallbackMessage: `Text je delší než ${MAX_LINES} řádků, proto jsem zpracoval jen prvních ${MAX_LINES}.`,
+        }
+      : result;
     semanticCache.set(limitedText, options.style, options.energy, result);
-    return result;
+    return finalResult;
   } catch (error) {
     console.error('Analysis failed, using fallback:', error);
     return {
       lines: createFallbackLines(limitedText),
       usedFallback: true,
-      fallbackMessage: 'AI odpověď selhala, proto jsem použil lokální fallback.',
+      fallbackMessage: wasTruncated
+        ? `AI odpověď selhala a text je delší než ${MAX_LINES} řádků, proto jsem použil lokální fallback jen pro prvních ${MAX_LINES} řádků.`
+        : 'AI odpověď selhala, proto jsem použil lokální fallback.',
     };
   }
 }
@@ -543,3 +626,11 @@ export async function regenerateLine(
     return fallbackAlternatives(line.original);
   }
 }
+
+export const __testing = {
+  normalizeAlternatives,
+  normalizeAnalysisResponse,
+  computeRhymeDensity,
+  scoreLineStructure,
+  preservesKeywords,
+};

@@ -96,6 +96,7 @@ const EditorWorkspace: React.FC = () => {
             setStyle={setStyle}
             energy={energy}
             setEnergy={setEnergy}
+            modelReady={modelReady}
             onAnalyze={handleAnalyze}
             isAnalyzing={isLoading}
             status={status}
