@@ -213,12 +213,18 @@ function readDraft(): AppDraft | null {
 
     const parsed = JSON.parse(raw) as unknown;
     if (!isValidAppDraft(parsed)) {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
       return null;
     }
 
     return parsed;
   } catch (error) {
     console.error('Failed to read draft:', error);
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch {
+      // Ignore cleanup errors when storage is unavailable.
+    }
     return null;
   }
 }

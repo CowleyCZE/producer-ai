@@ -18,6 +18,7 @@ describe('AppShell draft restore', () => {
     expect(draft.appState).toBe(AppState.INPUT);
     expect(draft.lyrics).toBe('');
     expect(draft.lines).toEqual([]);
+    expect(localStorage.removeItem).toHaveBeenCalledWith(DRAFT_STORAGE_KEY);
   });
 
   it('restores valid draft payload', () => {
@@ -46,5 +47,13 @@ describe('AppShell draft restore', () => {
     expect(draft?.style).toBe(StyleOption.TRAP);
     expect(draft?.energy).toBe(EnergyOption.HIGH);
     expect(draft?.lines).toHaveLength(1);
+  });
+
+  it('removes broken JSON draft payloads', () => {
+    localStorage.setItem(DRAFT_STORAGE_KEY, '{not-valid-json');
+
+    const draft = appShellTesting.readDraft();
+    expect(draft).toBeNull();
+    expect(localStorage.removeItem).toHaveBeenCalledWith(DRAFT_STORAGE_KEY);
   });
 });

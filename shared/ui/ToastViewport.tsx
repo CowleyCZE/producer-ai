@@ -7,15 +7,30 @@ const ToastItem: React.FC<{ toast: ToastType }> = ({ toast }) => {
   const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
+    const duration = toast.duration ?? 4000;
+    if (duration <= 0) {
+      return undefined;
+    }
+
+    const enterToExitDelay = Math.max(0, duration - 200);
+    let exitTimer: ReturnType<typeof setTimeout> | null = null;
     const timer = setTimeout(() => {
       setIsExiting(true);
-      setTimeout(() => removeToast(toast.id), 200);
-    }, (toast.duration || 4000) - 200);
+      exitTimer = setTimeout(() => removeToast(toast.id), 200);
+    }, enterToExitDelay);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (exitTimer) {
+        clearTimeout(exitTimer);
+      }
+    };
   }, [toast.duration, toast.id, removeToast]);
 
   const handleClose = () => {
+    if (isExiting) {
+      return;
+    }
     setIsExiting(true);
     setTimeout(() => removeToast(toast.id), 200);
   };
