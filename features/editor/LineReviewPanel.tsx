@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { assembleLyrics, regenerateLine } from './lyricsAi';
+import React, { useMemo, useRef, useState } from 'react';
+import { assembleLyrics, computeRhymeDensity, regenerateLine } from './lyricsAi';
 import { EditableLine, EnergyOption, StyleOption, VariantType } from './editorTypes';
 import { diffText } from './textDiff';
 import { useToast } from '../../shared/toast/ToastContext';
@@ -42,14 +42,27 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
   const [regeneratingLineId, setRegeneratingLineId] = useState<string | null>(null);
   const [showMobilePreview, setShowMobilePreview] = useState(false);
   const { success, error: showError } = useToast();
+  const lineRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const assembledLyrics = useMemo(() => assembleLyrics(lines), [lines]);
   const selectedCount = useMemo(() => lines.filter((line) => line.selectedOption).length, [lines]);
   const problemLineCount = useMemo(() => lines.filter((line) => line.needsFix).length, [lines]);
+  const nextUnresolvedLineId = useMemo(
+    () => lines.find((line) => line.needsFix && !line.selectedOption)?.id ?? null,
+    [lines],
+  );
   const unresolvedProblemCount = useMemo(
     () => lines.filter((line) => line.needsFix && !line.selectedOption).length,
     [lines],
   );
+  const rhymeDensity = useMemo(
+    () =>
+      computeRhymeDensity(
+        lines.map((line) => (line.selectedOption && line.alternatives ? line.alternatives[line.selectedOption] : line.original)),
+      ),
+    [lines],
+  );
+  const rhymeDensityLabel = rhymeDensity >= 0.6 ? 'silná' : rhymeDensity >= 0.3 ? 'střední' : 'slabá';
   const visibleLines = useMemo(
     () => lines.filter((line) => !showOnlyProblems || line.needsFix),
     [lines, showOnlyProblems],
@@ -117,6 +130,18 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
     }
   };
 
+  const handleJumpToNextUnresolved = () => {
+    if (!nextUnresolvedLineId) {
+      return;
+    }
+
+    setShowOnlyProblems(true);
+    lineRefs.current[nextUnresolvedLineId]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  };
+
   return (
     <section className="grid gap-6 pb-28 xl:grid-cols-[1.15fr_0.85fr] xl:pb-0">
       <div className="space-y-6">
@@ -133,6 +158,12 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              {nextUnresolvedLineId ? (
+                <button onClick={handleJumpToNextUnresolved} className="btn-secondary rounded-xl px-4 py-2 text-sm">
+                  Další nevyřešený
+                </button>
+              ) : null}
+
               <label className="flex items-center gap-2 text-sm text-surface-300">
                 <input
                   type="checkbox"
@@ -166,6 +197,31 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
             </div>
           </div>
         </div>
+
+        <div className="card border-surface-700/60">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-surface-500">Rhyme density</p>
+          <p className="mt-2 text-2xl font-black text-surface-100 capitalize">{rhymeDensityLabel} ({Math.round(rhymeDensity * 100)}%)</p>
+          <p className="mt-2 text-sm text-surface-400">
+            Porovnání zakončení řádků ukazuje, jak silné jsou rýmy v aktuálně zvolených variantách.
+          </p>
+        </div>
+
+        {problemLineCount > 0 && unresolvedProblemCount === 0 ? (
+          <div className="card border-success/30 bg-success/10">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-success">Hotovo</p>
+                <p className="mt-2 text-sm leading-6 text-surface-200">
+                  Všechny označené řádky už mají vybranou variantu. Teď můžeš zkontrolovat výsledek a zkopírovat ho.
+                </p>
+              </div>
+
+              <button onClick={handleCopy} className="btn-primary rounded-2xl px-4 py-3 text-sm font-black">
+                Kopírovat výsledek
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="card border-surface-700/60 xl:hidden">
           <div className="flex items-center justify-between gap-4">
@@ -202,7 +258,15 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
             const originalIndex = lines.findIndex((entry) => entry.id === line.id);
 
             return (
-              <article key={line.id} className="card border-surface-700/60 p-4 sm:p-6">
+              <article
+                key={line.id}
+                ref={(node) => {
+                  lineRefs.current[line.id] = node;
+                }}
+                className={`card border-surface-700/60 p-4 sm:p-6 ${
+                  line.id === nextUnresolvedLineId ? 'ring-1 ring-warning/40' : ''
+                }`}
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.25em] text-surface-500">
@@ -305,6 +369,12 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
           <button onClick={handleCopy} className="btn-primary mt-5 w-full rounded-2xl px-4 py-3 text-sm font-black">
             Kopírovat text
           </button>
+
+          {nextUnresolvedLineId ? (
+            <button onClick={handleJumpToNextUnresolved} className="btn-secondary mt-3 w-full rounded-2xl px-4 py-3 text-sm font-semibold">
+              Přejít na další nevyřešený řádek
+            </button>
+          ) : null}
         </div>
       </aside>
 
