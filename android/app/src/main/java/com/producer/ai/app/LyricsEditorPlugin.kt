@@ -13,6 +13,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -35,26 +37,39 @@ class LyricsEditorPlugin : Plugin() {
         Log.e(TAG, "LyricsEditorPlugin coroutine failed", error)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + coroutineErrorHandler)
+    private val initializationMutex = Mutex()
     private var isInitialized = false
 
     private suspend fun ensureInitialized(call: PluginCall): Boolean {
-        if (isInitialized) return true
-
-        val initResult = withContext(Dispatchers.IO) {
-            lyricsEditorService.initialize()
+        if (isInitialized) {
+            return true
         }
 
-        return initResult.fold(
-            onSuccess = {
-                isInitialized = true
-                true
-            },
-            onFailure = { error ->
-                isInitialized = false
-                call.reject("Model initialization failed: ${error.message}", Exception(error))
-                false
-            },
-        )
+        return initializationMutex.withLock {
+            if (isInitialized) {
+                return@withLock true
+            }
+
+            val initResult = withContext(Dispatchers.IO) {
+                lyricsEditorService.initialize()
+            }
+
+            initResult.fold(
+                onSuccess = {
+                    isInitialized = true
+                    true
+                },
+                onFailure = { error ->
+                    isInitialized = false
+                    call.reject("Model initialization failed: ${error.message}", toException(error))
+                    false
+                },
+            )
+        }
+    }
+
+    private fun toException(error: Throwable): Exception {
+        return error as? Exception ?: Exception(error)
     }
 
     override fun handleOnDestroy() {
@@ -88,7 +103,7 @@ class LyricsEditorPlugin : Plugin() {
                 isInitialized = true
                 call.resolve()
             }.onFailure { error ->
-                call.reject("Failed to load model: ${error.message}", Exception(error))
+                call.reject("Failed to load model: ${error.message}", toException(error))
             }
         }
     }
@@ -98,6 +113,10 @@ class LyricsEditorPlugin : Plugin() {
         val text = call.getString("text") ?: ""
         val context = call.getString("context") ?: ""
         val selectedMode = call.getString("selectedMode") ?: "AUTO"
+        if (text.isBlank()) {
+            call.resolve(JSObject("""{"mode":"AUTO","segments":[]}"""))
+            return
+        }
 
         scope.launch {
             if (!ensureInitialized(call)) return@launch
@@ -109,7 +128,7 @@ class LyricsEditorPlugin : Plugin() {
             result.onSuccess { analysisResult ->
                 resolveAnalysis(call, analysisResult)
             }.onFailure { error ->
-                call.reject("Error in analyzeLyrics: ${error.message}", Exception(error))
+                call.reject("Error in analyzeLyrics: ${error.message}", toException(error))
             }
         }
     }
