@@ -6,6 +6,8 @@ import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.util.Locale
+import java.util.UUID
 
 @Serializable
 data class EditorLineAlternative(
@@ -32,6 +34,7 @@ data class EditorAnalysisResult(
 
 class LyricsEditorService(private val context: Context) {
     private var llmInference: LlmInference? = null
+    private val supportedModes = setOf("AUTO", "BALANCED", "FLOW", "RHYME")
 
     private val json = Json {
         isLenient = true
@@ -65,6 +68,9 @@ class LyricsEditorService(private val context: Context) {
         if (!modelFile.exists()) {
             throw IllegalArgumentException("Model file not found at: $modelFile")
         }
+        if (!modelFile.name.lowercase(Locale.ROOT).endsWith(".tflite")) {
+            throw IllegalArgumentException("Unsupported model format. Expected .tflite file.")
+        }
 
         setupInference(modelFile.absolutePath)
     }
@@ -73,7 +79,7 @@ class LyricsEditorService(private val context: Context) {
         val inputStream = context.contentResolver.openInputStream(uri)
             ?: throw IllegalArgumentException("Cannot open content URI: $uri")
         val extension = uri.lastPathSegment?.substringAfterLast('.', "bin") ?: "bin"
-        val outputFile = File(context.cacheDir, "imported_model.$extension")
+        val outputFile = File(context.cacheDir, "imported_model_${UUID.randomUUID()}.$extension")
 
         inputStream.use { input ->
             outputFile.outputStream().use { output ->
@@ -84,10 +90,17 @@ class LyricsEditorService(private val context: Context) {
     }
 
     suspend fun analyzeLyrics(text: String, context: String, selectedMode: String): Result<EditorAnalysisResult> = runCatching {
-        val modeInstruction = if (selectedMode == "AUTO") {
+        val normalizedText = text.trim()
+        if (normalizedText.isEmpty()) {
+            return@runCatching EditorAnalysisResult(mode = "AUTO", segments = emptyList())
+        }
+
+        val normalizedMode = selectedMode.trim().uppercase(Locale.ROOT).ifEmpty { "AUTO" }
+        val effectiveMode = if (supportedModes.contains(normalizedMode)) normalizedMode else "AUTO"
+        val modeInstruction = if (effectiveMode == "AUTO") {
             "Detekuj nejvhodnější režim automaticky."
         } else {
-            "Režim: $selectedMode."
+            "Režim: $effectiveMode."
         }
 
         val prompt = """
@@ -98,7 +111,7 @@ class LyricsEditorService(private val context: Context) {
             $modeInstruction
 
             VSTUPNÍ TEXT K ANALÝZE:
-            $text
+            $normalizedText
         """.trimIndent()
 
         val rawResponse = llmInference?.generateResponse(prompt)
