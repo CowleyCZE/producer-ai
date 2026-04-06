@@ -47,6 +47,7 @@ class LyricsEditorService(private val context: Context) {
     }
 
     private fun setupInference(modelPath: String) {
+        closeInferenceIfNeeded()
         val options = LlmInference.LlmInferenceOptions.builder()
             .setModelPath(modelPath)
             .build()
@@ -65,11 +66,7 @@ class LyricsEditorService(private val context: Context) {
             throw IllegalArgumentException("Model file not found at: $modelFile")
         }
 
-        val options = LlmInference.LlmInferenceOptions.builder()
-            .setModelPath(modelFile.absolutePath)
-            .build()
-
-        llmInference = LlmInference.createFromOptions(context, options)
+        setupInference(modelFile.absolutePath)
     }
 
     private fun copyContentUriToCache(uri: Uri): File {
@@ -114,10 +111,10 @@ class LyricsEditorService(private val context: Context) {
         val cleaned = value.replace("```json", "").replace("```", "").trim()
         val startIndex = cleaned.indexOf('{')
         val endIndex = cleaned.lastIndexOf('}')
-        return if (startIndex != -1 && endIndex != -1) {
+        return if (startIndex != -1 && endIndex != -1 && startIndex <= endIndex) {
             cleaned.substring(startIndex, endIndex + 1)
         } else {
-            "{}"
+            throw IllegalArgumentException("Model response does not contain valid JSON object")
         }
     }
 
@@ -125,7 +122,7 @@ class LyricsEditorService(private val context: Context) {
 
     private fun copyModelFromAssets(modelName: String): File {
         val modelFile = File(context.cacheDir, modelName)
-        if (modelFile.exists() && modelFile.length() < 100 * 1024 * 1024) {
+        if (modelFile.exists() && modelFile.length() == 0L) {
             modelFile.delete()
         }
         if (!modelFile.exists()) {
@@ -136,5 +133,12 @@ class LyricsEditorService(private val context: Context) {
             }
         }
         return modelFile
+    }
+
+    private fun closeInferenceIfNeeded() {
+        (llmInference as? AutoCloseable)?.let { inference ->
+            runCatching { inference.close() }
+        }
+        llmInference = null
     }
 }

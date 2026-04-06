@@ -1,12 +1,16 @@
 package com.producer.ai.app
 
+import android.util.Log
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -14,6 +18,9 @@ import kotlinx.serialization.json.Json
 
 @CapacitorPlugin(name = "LyricsEditor")
 class LyricsEditorPlugin : Plugin() {
+    companion object {
+        private const val TAG = "LyricsEditorPlugin"
+    }
 
     private val json = Json {
         encodeDefaults = true
@@ -24,21 +31,43 @@ class LyricsEditorPlugin : Plugin() {
         LyricsEditorService(context)
     }
 
-    private val scope = CoroutineScope(Dispatchers.Main)
+    private val coroutineErrorHandler = CoroutineExceptionHandler { _, error ->
+        Log.e(TAG, "LyricsEditorPlugin coroutine failed", error)
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + coroutineErrorHandler)
     private var isInitialized = false
 
     private suspend fun ensureInitialized(call: PluginCall): Boolean {
         if (isInitialized) return true
 
-        return withContext(Dispatchers.IO) {
-            val initResult = lyricsEditorService.initialize()
-            initResult.onSuccess {
+        val initResult = withContext(Dispatchers.IO) {
+            lyricsEditorService.initialize()
+        }
+
+        return initResult.fold(
+            onSuccess = {
                 isInitialized = true
-            }.onFailure { error ->
-                call.reject("Model initialization failed: ${error.message}", Exception(error))
+                true
+            },
+            onFailure = { error ->
                 isInitialized = false
-            }
-            isInitialized
+                call.reject("Model initialization failed: ${error.message}", Exception(error))
+                false
+            },
+        )
+    }
+
+    override fun handleOnDestroy() {
+        scope.cancel("LyricsEditorPlugin destroyed")
+        super.handleOnDestroy()
+    }
+
+    private fun resolveAnalysis(call: PluginCall, analysisResult: EditorAnalysisResult) {
+        try {
+            val jsonString = json.encodeToString(analysisResult)
+            call.resolve(JSObject(jsonString))
+        } catch (error: Exception) {
+            call.reject("Failed to parse analysis result", error)
         }
     }
 
@@ -77,12 +106,7 @@ class LyricsEditorPlugin : Plugin() {
             }
 
             result.onSuccess { analysisResult ->
-                try {
-                    val jsonString = json.encodeToString(analysisResult)
-                    call.resolve(JSObject(jsonString))
-                } catch (error: Exception) {
-                    call.reject("Failed to parse analysis result", error)
-                }
+                resolveAnalysis(call, analysisResult)
             }.onFailure { error ->
                 call.reject("Error in analyzeLyrics: ${error.message}", Exception(error))
             }
