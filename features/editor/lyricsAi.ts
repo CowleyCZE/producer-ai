@@ -137,11 +137,18 @@ const REMOTE_PROVIDER_SET = new Set<ModelProvider>([
   ModelProvider.OPENROUTER,
   ModelProvider.GROQ,
 ]);
+const SUPPORTED_PROVIDER_SET = new Set<ModelProvider>([
+  ModelProvider.GEMINI,
+  ModelProvider.OPENAI,
+  ModelProvider.OPENROUTER,
+  ModelProvider.GROQ,
+  ModelProvider.OLLAMA,
+]);
 
 export type ApiKeySource = 'session' | 'env' | null;
 
 function isKnownProvider(value: string | null): value is ModelProvider {
-  return Object.values(ModelProvider).includes(value as ModelProvider);
+  return SUPPORTED_PROVIDER_SET.has(value as ModelProvider);
 }
 
 function getApiKeyStorageKey(provider: ModelProvider): string | null {
@@ -338,6 +345,9 @@ export function getProvider(): ModelProvider {
 }
 
 export function setProvider(provider: ModelProvider): void {
+  if (!SUPPORTED_PROVIDER_SET.has(provider)) {
+    return;
+  }
   safeLocalStorageSetItem('ai_provider', provider);
 }
 

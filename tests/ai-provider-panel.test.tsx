@@ -448,4 +448,24 @@ describe('AiProviderPanel', () => {
 
     expect(providerMocks.clearProviderApiKey).toHaveBeenCalledWith(ModelProvider.OPENAI);
   });
+
+  it('exposes remote inputs through accessible labels', async () => {
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Backend')).toBeInTheDocument();
+    });
+
+    if (!screen.queryByRole('button', { name: /OpenAI/i })) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI/i }));
+
+    expect(screen.getByLabelText('OpenAI API key')).toBeInTheDocument();
+    expect(screen.getByLabelText('OpenAI model')).toBeInTheDocument();
+  });
 });

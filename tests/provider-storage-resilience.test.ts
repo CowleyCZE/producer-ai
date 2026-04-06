@@ -31,6 +31,11 @@ describe('Provider storage resilience', () => {
     getItemSpy.mockRestore();
   });
 
+  it('ignores unsupported legacy provider value from storage', () => {
+    localStorage.setItem('ai_provider', ModelProvider.LOCAL);
+    expect(getProvider()).toBe(ModelProvider.GEMINI);
+  });
+
   it('does not throw when localStorage writes throw', () => {
     const setItemSpy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
       throw new Error('storage blocked');
@@ -47,5 +52,11 @@ describe('Provider storage resilience', () => {
 
     setItemSpy.mockRestore();
     removeItemSpy.mockRestore();
+  });
+
+  it('does not persist unsupported provider values', () => {
+    setProvider(ModelProvider.LOCAL);
+    expect(localStorage.setItem).not.toHaveBeenCalledWith('ai_provider', ModelProvider.LOCAL);
+    expect(getProvider()).toBe(ModelProvider.GEMINI);
   });
 });

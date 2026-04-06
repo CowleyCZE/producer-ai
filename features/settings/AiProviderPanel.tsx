@@ -114,6 +114,8 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
   const selectedProviderRef = useRef<ModelProvider>(selectedProvider);
   const ollamaLoadRequestRef = useRef(0);
   const { success, error: showError } = useToast();
+  const apiKeyInputId = `api-key-input-${selectedProvider}`;
+  const modelInputId = `model-input-${selectedProvider}`;
 
   const activeProviderMeta = PROVIDER_OPTIONS.find((option) => option.provider === selectedProvider) || PROVIDER_OPTIONS[0];
 
@@ -452,10 +454,11 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
 
             {REMOTE_PROVIDERS.has(selectedProvider) && (
               <div>
-                <label className="mb-2 block text-xs font-semibold text-surface-400">
+                <label htmlFor={apiKeyInputId} className="mb-2 block text-xs font-semibold text-surface-400">
                   {activeProviderMeta.apiKeyLabel}
                 </label>
                 <input
+                  id={apiKeyInputId}
                   type="password"
                   value={apiKeyInput}
                   onChange={(event) => setApiKeyInput(event.target.value)}
@@ -487,7 +490,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
                   className="input mb-3"
                 />
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <label className="block text-xs font-semibold text-surface-400">
+                  <label htmlFor={modelInputId} className="block text-xs font-semibold text-surface-400">
                     {activeProviderMeta.modelLabel}
                   </label>
                   <button
@@ -500,6 +503,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
                   </button>
                 </div>
                 <select
+                  id={modelInputId}
                   value={modelInput}
                   onChange={(event) => setModelInput(event.target.value)}
                   className="input cursor-pointer"
@@ -530,10 +534,11 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
               </div>
             ) : (
               <div>
-                <label className="mb-2 block text-xs font-semibold text-surface-400">
+                <label htmlFor={modelInputId} className="mb-2 block text-xs font-semibold text-surface-400">
                   {activeProviderMeta.modelLabel}
                 </label>
                 <input
+                  id={modelInputId}
                   type="text"
                   value={modelInput}
                   onChange={(event) => setModelInput(event.target.value)}

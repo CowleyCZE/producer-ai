@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { assembleLyrics, computeRhymeDensity, isAlternativeSelection, isLineResolved, regenerateLine, resolveLineText } from './lyricsAi';
 import { EditableLine, EnergyOption, StyleOption, VariantType } from './editorTypes';
 import { diffText } from './textDiff';
@@ -44,6 +44,11 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
   const { success, warning, error: showError } = useToast();
   const lineRefs = useRef<Record<string, HTMLElement | null>>({});
   const regenerationLockRef = useRef(false);
+  const latestLinesRef = useRef(lines);
+
+  useEffect(() => {
+    latestLinesRef.current = lines;
+  }, [lines]);
 
   const assembledLyrics = useMemo(() => assembleLyrics(lines), [lines]);
   const resolvedCount = useMemo(() => lines.filter((line) => line.needsFix && isLineResolved(line)).length, [lines]);
@@ -101,7 +106,7 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
     setRegeneratingLineId(lineId);
 
     try {
-      const alternatives = await regenerateLine(lines, lineId, { style, energy });
+      const alternatives = await regenerateLine(latestLinesRef.current, lineId, { style, energy });
       setLines((currentLines) =>
         currentLines.map((line) =>
           line.id !== lineId
