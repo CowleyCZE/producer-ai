@@ -182,22 +182,41 @@ function getLocalStorageOrNull(): Storage | null {
   }
 }
 
+function safeLocalStorageGetItem(key: string): string | null {
+  try {
+    return getLocalStorageOrNull()?.getItem(key) || null;
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalStorageSetItem(key: string, value: string): void {
+  try {
+    getLocalStorageOrNull()?.setItem(key, value);
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
+}
+
+function safeLocalStorageRemoveItem(key: string): void {
+  try {
+    getLocalStorageOrNull()?.removeItem(key);
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
+}
+
 function isGeminiEnvApiKeyDisabled(): boolean {
-  return getLocalStorageOrNull()?.getItem(GEMINI_ENV_API_KEY_DISABLED_KEY) === '1';
+  return safeLocalStorageGetItem(GEMINI_ENV_API_KEY_DISABLED_KEY) === '1';
 }
 
 function setGeminiEnvApiKeyDisabled(disabled: boolean): void {
-  const storage = getLocalStorageOrNull();
-  if (!storage) {
-    return;
-  }
-
   if (disabled) {
-    storage.setItem(GEMINI_ENV_API_KEY_DISABLED_KEY, '1');
+    safeLocalStorageSetItem(GEMINI_ENV_API_KEY_DISABLED_KEY, '1');
     return;
   }
 
-  storage.removeItem(GEMINI_ENV_API_KEY_DISABLED_KEY);
+  safeLocalStorageRemoveItem(GEMINI_ENV_API_KEY_DISABLED_KEY);
 }
 
 export function getProviderApiKey(provider: ModelProvider): string | null {
@@ -282,7 +301,7 @@ export function hasApiKey(): boolean {
 }
 
 export function getProvider(): ModelProvider {
-  const saved = localStorage.getItem('ai_provider');
+  const saved = safeLocalStorageGetItem('ai_provider');
   if (isKnownProvider(saved)) {
     return saved;
   }
@@ -290,7 +309,7 @@ export function getProvider(): ModelProvider {
 }
 
 export function setProvider(provider: ModelProvider): void {
-  localStorage.setItem('ai_provider', provider);
+  safeLocalStorageSetItem('ai_provider', provider);
 }
 
 export function getModelForProvider(provider: ModelProvider): string {
@@ -299,7 +318,7 @@ export function getModelForProvider(provider: ModelProvider): string {
     return getProviderDefaultModel(provider);
   }
 
-  return localStorage.getItem(storageKey) || getProviderDefaultModel(provider);
+  return safeLocalStorageGetItem(storageKey) || getProviderDefaultModel(provider);
 }
 
 export function setModelForProvider(provider: ModelProvider, modelName: string): void {
@@ -308,7 +327,7 @@ export function setModelForProvider(provider: ModelProvider, modelName: string):
     return;
   }
 
-  localStorage.setItem(storageKey, modelName);
+  safeLocalStorageSetItem(storageKey, modelName);
 }
 
 export function getBaseUrlForProvider(provider: ModelProvider): string {
@@ -317,7 +336,7 @@ export function getBaseUrlForProvider(provider: ModelProvider): string {
     return getProviderDefaultBaseUrl(provider);
   }
 
-  return normalizeBaseUrl(localStorage.getItem(storageKey) || getProviderDefaultBaseUrl(provider));
+  return normalizeBaseUrl(safeLocalStorageGetItem(storageKey) || getProviderDefaultBaseUrl(provider));
 }
 
 export function setBaseUrlForProvider(provider: ModelProvider, baseUrl: string): void {
@@ -326,7 +345,7 @@ export function setBaseUrlForProvider(provider: ModelProvider, baseUrl: string):
     return;
   }
 
-  localStorage.setItem(storageKey, normalizeBaseUrl(baseUrl) || getProviderDefaultBaseUrl(provider));
+  safeLocalStorageSetItem(storageKey, normalizeBaseUrl(baseUrl) || getProviderDefaultBaseUrl(provider));
 }
 
 export function getOllamaModel(): string {
@@ -346,7 +365,7 @@ export function setOllamaBaseUrl(baseUrl: string): void {
 }
 
 export function isOllamaConnected(): boolean {
-  return localStorage.getItem('ai_provider') === ModelProvider.OLLAMA;
+  return safeLocalStorageGetItem('ai_provider') === ModelProvider.OLLAMA;
 }
 
 export async function testApiKey(): Promise<boolean> {

@@ -90,6 +90,14 @@ const REMOTE_PROVIDERS = new Set<ModelProvider>([
   ModelProvider.GROQ,
 ]);
 
+function safeRemoveActiveProviderMarker(): void {
+  try {
+    localStorage.removeItem('ai_provider');
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
+}
+
 const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => {
   const [modelStatus, setModelStatus] = useState<ModelStatus>('not_loaded');
   const [statusMessage, setStatusMessage] = useState<string>('Nastavení AI modelu');
@@ -335,7 +343,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
       clearProviderApiKey(activeProvider);
     }
 
-    localStorage.removeItem('ai_provider');
+    safeRemoveActiveProviderMarker();
     setModelStatus('not_loaded');
     setStatusMessage('Nastavení AI modelu');
     setIsExpanded(true);

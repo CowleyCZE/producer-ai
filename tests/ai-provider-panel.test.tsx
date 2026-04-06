@@ -327,4 +327,30 @@ describe('AiProviderPanel', () => {
       expect(screen.getByText('✓ OpenAI připravena')).toBeInTheDocument();
     });
   });
+
+  it('does not crash during disconnect when localStorage.removeItem throws', async () => {
+    const removeSpy = vi.spyOn(localStorage, 'removeItem').mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+
+    render(
+      <ToastProvider>
+        <AiProviderPanel />
+      </ToastProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Gemini API připravena')).toBeInTheDocument();
+    });
+
+    if (!screen.queryByTitle('Odpojit aktivní provider')) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+
+    expect(() => {
+      fireEvent.click(screen.getByTitle('Odpojit aktivní provider'));
+    }).not.toThrow();
+
+    removeSpy.mockRestore();
+  });
 });
