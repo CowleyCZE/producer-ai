@@ -149,4 +149,50 @@ describe('LineReviewPanel', () => {
     expect(screen.getByText(/nemám použitelnou variantu/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ponechat původní řádek' })).toBeInTheDocument();
   });
+
+  it('ignores delayed regenerate result after the panel is unmounted', async () => {
+    let resolveRegenerate!: (value: EditableLine['alternatives']) => void;
+    lineReviewMocks.regenerateLine.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRegenerate = resolve as (value: EditableLine['alternatives']) => void;
+      }),
+    );
+    const setLines = vi.fn();
+
+    const view = render(
+      <ToastProvider>
+        <LineReviewPanel
+          lines={[
+            {
+              id: 'line-0',
+              original: 'Skaka pes přes oves',
+              needsFix: true,
+              alternatives: {
+                balanced: 'Skáče pes přes ten oves',
+                flow: 'Skáče pes, přes oves',
+                rhyme: 'Skáče pes přes oves, nese otisk do obce',
+              },
+              selectedOption: null,
+            },
+          ]}
+          setLines={setLines}
+          style={StyleOption.BOOMBAP}
+          energy={EnergyOption.MEDIUM}
+          onBack={vi.fn()}
+        />
+      </ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zkus znovu' }));
+    view.unmount();
+    resolveRegenerate({
+      balanced: 'Skáče pes přes nový oves',
+      flow: 'Skáče pes, přes oves dál',
+      rhyme: 'Skáče pes přes oves, nese stopy přes les',
+    });
+
+    await waitFor(() => {
+      expect(setLines).not.toHaveBeenCalled();
+    });
+  });
 });

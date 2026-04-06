@@ -20,6 +20,7 @@ const MAX_SYLLABLE_DELTA = 2;
 const MIN_VARIANT_LENGTH = 3;
 const KEYWORDS_TO_PRESERVE = ['panelák', 'makám', 'děti'];
 const GEMINI_ENV_API_KEY_DISABLED_KEY = 'gemini_env_api_key_disabled';
+const NETWORK_TIMEOUT_MS = 12000;
 
 export const AI_ANALYZE_LINE_LIMIT = MAX_LINES;
 
@@ -444,7 +445,7 @@ export async function testGeminiKey(apiKey: string, modelName = getModelForProvi
 
 export async function getAvailableOllamaModels(baseUrl = getOllamaBaseUrl()): Promise<string[]> {
   try {
-    const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/tags`, {
+    const response = await fetchWithTimeout(`${normalizeBaseUrl(baseUrl)}/api/tags`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -755,7 +756,7 @@ async function callOllamaWithConfig(
   systemPrompt: string,
   options: { temperature?: number; numPredict?: number } = {},
 ): Promise<string> {
-  const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/generate`, {
+  const response = await fetchWithTimeout(`${normalizeBaseUrl(baseUrl)}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -822,7 +823,7 @@ async function callOpenAiCompatibleWithConfig(
     throw new Error(`Missing base URL for provider: ${provider}`);
   }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -850,6 +851,24 @@ async function callOpenAiCompatibleWithConfig(
   }
 
   return text;
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs = NETWORK_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function callOpenAiCompatible(

@@ -45,10 +45,17 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
   const lineRefs = useRef<Record<string, HTMLElement | null>>({});
   const regenerationLockRef = useRef(false);
   const latestLinesRef = useRef(lines);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     latestLinesRef.current = lines;
   }, [lines]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const assembledLyrics = useMemo(() => assembleLyrics(lines), [lines]);
   const resolvedCount = useMemo(() => lines.filter((line) => line.needsFix && isLineResolved(line)).length, [lines]);
@@ -107,6 +114,9 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
 
     try {
       const alternatives = await regenerateLine(latestLinesRef.current, lineId, { style, energy });
+      if (!isMountedRef.current) {
+        return;
+      }
       setLines((currentLines) =>
         currentLines.map((line) =>
           line.id !== lineId
@@ -128,10 +138,14 @@ const LineReviewPanel: React.FC<LineReviewPanelProps> = ({ lines, setLines, styl
       }
     } catch (error) {
       console.error('Regenerate failed:', error);
-      showError('Nepodařilo se vygenerovat nové varianty.');
+      if (isMountedRef.current) {
+        showError('Nepodařilo se vygenerovat nové varianty.');
+      }
     } finally {
-      regenerationLockRef.current = false;
-      setRegeneratingLineId(null);
+      if (isMountedRef.current) {
+        regenerationLockRef.current = false;
+        setRegeneratingLineId(null);
+      }
     }
   };
 

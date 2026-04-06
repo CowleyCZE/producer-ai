@@ -227,12 +227,18 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
     const initialize = async () => {
       try {
         const savedProvider = getProvider();
+        if (!isMountedRef.current) {
+          return;
+        }
         setSelectedProvider(savedProvider);
         hydrateProviderFields(savedProvider);
 
         if (savedProvider === ModelProvider.OLLAMA) {
           const ollamaBaseUrl = getBaseUrlForProvider(ModelProvider.OLLAMA);
           const models = await loadOllamaModels(true, ollamaBaseUrl);
+          if (!isMountedRef.current) {
+            return;
+          }
           if (models.length > 0) {
             const storedModel = getModelForProvider(ModelProvider.OLLAMA);
             const activeModel = models.includes(storedModel) ? storedModel : models[0];
@@ -240,6 +246,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
               modelName: activeModel,
               baseUrl: ollamaBaseUrl,
             });
+            if (!isMountedRef.current) {
+              return;
+            }
             if (!isValid) {
               setIsExpanded(true);
               setActiveProvider(null);
@@ -263,6 +272,9 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
               apiKey,
               modelName: getModelForProvider(savedProvider),
             });
+            if (!isMountedRef.current) {
+              return;
+            }
 
             if (isValid) {
               setIsExpanded(false);
@@ -277,11 +289,16 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
         updateStatus('not_loaded', 'Nastavení AI modelu');
       } catch (error) {
         console.error('Provider initialization failed:', error);
+        if (!isMountedRef.current) {
+          return;
+        }
         setActiveProvider(null);
         setIsExpanded(true);
         updateStatus('error', 'Nepodařilo se načíst konfiguraci AI backendu');
       } finally {
-        hasHydratedRef.current = true;
+        if (isMountedRef.current) {
+          hasHydratedRef.current = true;
+        }
       }
     };
 
