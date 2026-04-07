@@ -354,13 +354,17 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
           throw new Error('Invalid API configuration');
         }
 
-        setBaseUrlForProvider(provider, trimmedBaseUrl);
-        setModelForProvider(provider, nextModel);
-        setProvider(provider);
+        markProviderReady(provider);
+        setIsExpanded(false);
         setModelInput(nextModel);
         setOllamaBaseUrlInput(trimmedBaseUrl);
-        setIsExpanded(false);
-        markProviderReady(provider);
+        try {
+          setBaseUrlForProvider(provider, trimmedBaseUrl);
+          setModelForProvider(provider, nextModel);
+          setProvider(provider);
+        } catch (persistError) {
+          console.error('Failed to persist Ollama provider state:', persistError);
+        }
         success('Ollama úspěšně připojena!');
         return;
       }
@@ -377,13 +381,17 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
         throw new Error('Invalid API configuration');
       }
 
-      if (trimmedApiKey) {
-        setProviderApiKey(provider, trimmedApiKey);
-      }
-      setModelForProvider(provider, trimmedModel);
-      setProvider(provider);
-      setIsExpanded(false);
       markProviderReady(provider);
+      setIsExpanded(false);
+      try {
+        if (trimmedApiKey) {
+          setProviderApiKey(provider, trimmedApiKey);
+        }
+        setModelForProvider(provider, trimmedModel);
+        setProvider(provider);
+      } catch (persistError) {
+        console.error(`Failed to persist ${providerMeta.label} provider state:`, persistError);
+      }
       success(`${providerMeta.label} úspěšně připojena!`);
     } catch (error: any) {
       console.error(`${providerMeta.label} connection error:`, error);
