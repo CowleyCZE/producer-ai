@@ -63,6 +63,9 @@ const CONNECTION_PROBE_PROMPT = 'Odpověz přesně textem OK.';
 const CONNECTION_PROBE_SYSTEM_PROMPT = 'Jsi test dostupnosti AI modelu. Odpovídej stručně a bez formátování.';
 const OLLAMA_EMBEDDING_NAME_HINTS = ['embed', 'embedding', 'minilm', 'bge', 'e5'];
 const OLLAMA_NON_GENERATIVE_FAMILIES = new Set(['bert']);
+const OLLAMA_ANALYZE_NUM_PREDICT = 384;
+const OLLAMA_REGENERATE_NUM_PREDICT = 192;
+const OLLAMA_NUM_CTX = 2048;
 
 class SemanticCache {
   private cache: Map<string, CacheEntry> = new Map();
@@ -777,6 +780,42 @@ ${options.energy}
 ${ANALYZE_INSTRUCTION_BLOCK}`;
 }
 
+function buildOllamaAnalyzePrompt(text: string, options: AnalyzeOptions): string {
+  const lineCount = text.split('\n').slice(0, MAX_LINES).length;
+
+  return `Vstupní řádky:
+${buildLinePayload(text)}
+
+Styl: ${options.style}
+Energie: ${options.energy}
+
+Vrať pouze JSON:
+{
+  "lines": [
+    {
+      "line_index": 0,
+      "original": "presny puvodni radek",
+      "needs_fix": true,
+      "alternatives": {
+        "balanced": "text",
+        "flow": "text",
+        "rhyme": "text"
+      }
+    }
+  ]
+}
+
+Pravidla:
+- vrať přesně ${lineCount} objektů v poli lines
+- original a line_index musí přesně odpovídat vstupu
+- když řádek nepotřebuje úpravu, dej needs_fix false a alternatives null
+- balanced drž význam nejblíž
+- flow zlepší rytmus
+- rhyme přidá silnější rým
+- zachovej podobnou délku řádku
+- bez komentářů, bez markdownu, jen JSON`;
+}
+
 function buildRegeneratePrompt(text: string, line: EditableLine, options: AnalyzeOptions): string {
   return `Celý text:
 ${text}
@@ -794,12 +833,42 @@ Energie:
 ${options.energy}`;
 }
 
+function buildOllamaRegeneratePrompt(text: string, line: EditableLine, options: AnalyzeOptions): string {
+  return `Celý text:
+${text}
+
+Oprav jen tento řádek:
+${JSON.stringify({
+  line_index: Number.parseInt(line.id.replace('line-', ''), 10) || 0,
+  original: line.original,
+}, null, 2)}
+
+Styl: ${options.style}
+Energie: ${options.energy}
+
+Vrať pouze JSON:
+{
+  "alternatives": {
+    "balanced": "text",
+    "flow": "text",
+    "rhyme": "text"
+  }
+}
+
+Pravidla:
+- balanced drž význam nejblíž
+- flow zlepší rytmus
+- rhyme přidá silnější rým
+- podobná délka řádku
+- bez komentářů, bez markdownu, jen JSON`;
+}
+
 async function callOllamaWithConfig(
   modelName: string,
   baseUrl: string,
   prompt: string,
   systemPrompt: string,
-  options: { temperature?: number; numPredict?: number; timeoutMs?: number; responseFormat?: 'json' | 'text' } = {},
+  options: { temperature?: number; numPredict?: number; timeoutMs?: number; responseFormat?: 'json' | 'text'; numCtx?: number } = {},
 ): Promise<string> {
   const response = await fetchWithTimeout(`${getOllamaRequestBaseUrl(baseUrl)}/api/generate`, {
     method: 'POST',
@@ -812,6 +881,7 @@ async function callOllamaWithConfig(
       options: {
         temperature: options.temperature ?? 0.7,
         num_predict: options.numPredict ?? 2048,
+        num_ctx: options.numCtx,
       },
     }),
   }, options.timeoutMs ?? OLLAMA_REQUEST_TIMEOUT_MS);
@@ -825,7 +895,17 @@ async function callOllamaWithConfig(
 }
 
 async function callOllama(prompt: string, systemPrompt: string): Promise<string> {
-  return callOllamaWithConfig(getOllamaModel(), getOllamaBaseUrl(), prompt, systemPrompt);
+  return callOllamaWithConfig(
+    getOllamaModel(),
+    getOllamaBaseUrl(),
+    prompt,
+    systemPrompt,
+    {
+      numPredict: OLLAMA_ANALYZE_NUM_PREDICT,
+      numCtx: OLLAMA_NUM_CTX,
+      timeoutMs: OLLAMA_REQUEST_TIMEOUT_MS,
+    },
+  );
 }
 
 function extractOpenAiCompatibleText(content: unknown): string {
@@ -1373,8 +1453,14 @@ export async function analyzeLyrics(text: string, options: AnalyzeOptions): Prom
   }
 
   try {
-    const prompt = buildAnalyzePrompt(limitedText, options);
-    const responseText = await callAI(prompt, getAnalyzeSystemPrompt());
+    const activeProvider = getProvider();
+    const prompt = activeProvider === ModelProvider.OLLAMA
+      ? buildOllamaAnalyzePrompt(limitedText, options)
+      : buildAnalyzePrompt(limitedText, options);
+    const systemPrompt = activeProvider === ModelProvider.OLLAMA
+      ? 'Jsi český rapový editor. Odpověz jen validním JSONem.'
+      : getAnalyzeSystemPrompt();
+    const responseText = await callAI(prompt, systemPrompt);
     const parsed = parseJSONResponse(responseText);
     const result = normalizeAnalysisResponse(parsed, limitedText);
     const finalResult = wasTruncated
@@ -1411,10 +1497,14 @@ export async function regenerateLine(
   const fullText = assembleLyrics(allLines);
 
   try {
-    const responseText = await callAI(
-      buildRegeneratePrompt(fullText, line, options),
-      getRegenerateSystemPrompt(),
-    );
+    const activeProvider = getProvider();
+    const prompt = activeProvider === ModelProvider.OLLAMA
+      ? buildOllamaRegeneratePrompt(fullText, line, options)
+      : buildRegeneratePrompt(fullText, line, options);
+    const systemPrompt = activeProvider === ModelProvider.OLLAMA
+      ? 'Jsi český rapový editor. Odpověz jen validním JSONem.'
+      : getRegenerateSystemPrompt();
+    const responseText = await callAI(prompt, systemPrompt);
 
     const parsed = parseJSONResponse(responseText) as { alternatives?: unknown };
     return normalizeAlternatives(parsed.alternatives, line.original);
