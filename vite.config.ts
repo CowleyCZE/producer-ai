@@ -10,6 +10,31 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api/ollama': {
+            target: 'http://127.0.0.1:11434',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/ollama/, ''),
+          },
+          '/api/openai': {
+            target: 'https://api.openai.com',
+            changeOrigin: true,
+            secure: true,
+            rewrite: (path) => path.replace(/^\/api\/openai/, ''),
+          },
+          '/api/openrouter': {
+            target: 'https://openrouter.ai',
+            changeOrigin: true,
+            secure: true,
+            rewrite: (path) => path.replace(/^\/api\/openrouter/, ''),
+          },
+          '/api/groq': {
+            target: 'https://api.groq.com',
+            changeOrigin: true,
+            secure: true,
+            rewrite: (path) => path.replace(/^\/api\/groq/, ''),
+          },
+        },
       },
       plugins: [
         react(),

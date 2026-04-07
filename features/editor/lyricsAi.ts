@@ -135,6 +135,12 @@ const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<ModelProvider, string>> = {
   [ModelProvider.OPENROUTER]: OPENROUTER_BASE_URL,
   [ModelProvider.GROQ]: GROQ_BASE_URL,
 };
+const DEV_PROXY_BASE_URLS: Partial<Record<ModelProvider, string>> = {
+  [ModelProvider.OPENAI]: '/api/openai/v1',
+  [ModelProvider.OPENROUTER]: '/api/openrouter/api/v1',
+  [ModelProvider.GROQ]: '/api/groq/openai/v1',
+  [ModelProvider.OLLAMA]: '/api/ollama',
+};
 
 const REMOTE_PROVIDER_SET = new Set<ModelProvider>([
   ModelProvider.GEMINI,
@@ -188,6 +194,34 @@ function normalizeBaseUrl(baseUrl: string): string {
   }
 
   return `http://${withoutTrailingSlash}`;
+}
+
+function shouldUseDevProxy(): boolean {
+  return import.meta.env.DEV && import.meta.env.MODE !== 'test';
+}
+
+function isLocalOllamaBaseUrl(baseUrl: string): boolean {
+  const normalized = normalizeBaseUrl(baseUrl);
+  return (
+    normalized === 'http://localhost:11434'
+    || normalized === 'http://127.0.0.1:11434'
+  );
+}
+
+function getOllamaRequestBaseUrl(baseUrl: string): string {
+  if (shouldUseDevProxy() && isLocalOllamaBaseUrl(baseUrl)) {
+    return DEV_PROXY_BASE_URLS[ModelProvider.OLLAMA] || '/api/ollama';
+  }
+
+  return normalizeBaseUrl(baseUrl);
+}
+
+function getOpenAiCompatibleRequestBaseUrl(provider: OpenAiCompatibleProvider): string {
+  if (shouldUseDevProxy()) {
+    return DEV_PROXY_BASE_URLS[provider] || OPENAI_COMPATIBLE_BASE_URLS[provider] || '';
+  }
+
+  return OPENAI_COMPATIBLE_BASE_URLS[provider] || '';
 }
 
 function getSessionStorageOrNull(): Storage | null {
@@ -458,7 +492,7 @@ export async function testGeminiKey(apiKey: string, modelName = getModelForProvi
 
 export async function getAvailableOllamaModels(baseUrl = getOllamaBaseUrl()): Promise<string[]> {
   try {
-    const response = await fetchWithTimeout(`${normalizeBaseUrl(baseUrl)}/api/tags`, {
+    const response = await fetchWithTimeout(`${getOllamaRequestBaseUrl(baseUrl)}/api/tags`, {
       method: 'GET',
     });
 
@@ -692,7 +726,7 @@ async function callOllamaWithConfig(
   systemPrompt: string,
   options: { temperature?: number; numPredict?: number } = {},
 ): Promise<string> {
-  const response = await fetchWithTimeout(`${normalizeBaseUrl(baseUrl)}/api/generate`, {
+  const response = await fetchWithTimeout(`${getOllamaRequestBaseUrl(baseUrl)}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -755,11 +789,12 @@ async function callOpenAiCompatibleWithConfig(
   }
 
   const baseUrl = OPENAI_COMPATIBLE_BASE_URLS[provider];
-  if (!baseUrl) {
+  const requestBaseUrl = getOpenAiCompatibleRequestBaseUrl(provider);
+  if (!requestBaseUrl) {
     throw new Error(`Missing base URL for provider: ${provider}`);
   }
 
-  const response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
+  const response = await fetchWithTimeout(`${requestBaseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
