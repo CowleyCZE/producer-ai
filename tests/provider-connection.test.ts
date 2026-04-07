@@ -40,29 +40,14 @@ describe('Provider connection probes', () => {
     localStorage.clear();
   });
 
-  it('accepts OpenAI-compatible providers only when they return valid analyze JSON', async () => {
+  it('accepts OpenAI-compatible providers when they answer the lightweight connection ping', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         choices: [
           {
             message: {
-              content: JSON.stringify({
-                lines: [
-                  {
-                    line_index: 0,
-                    original: 'Makám celej den',
-                    needs_fix: false,
-                    alternatives: null,
-                  },
-                  {
-                    line_index: 1,
-                    original: 'Hlava plná stresu',
-                    needs_fix: false,
-                    alternatives: null,
-                  },
-                ],
-              }),
+              content: 'OK',
             },
           },
         ],
@@ -83,14 +68,14 @@ describe('Provider connection probes', () => {
     );
   });
 
-  it('rejects OpenAI-compatible providers when JSON contract is invalid', async () => {
+  it('rejects OpenAI-compatible providers when the ping answer does not confirm readiness', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         choices: [
           {
             message: {
-              content: '{"unexpected":true}',
+              content: 'not-ready',
             },
           },
         ],
@@ -116,22 +101,7 @@ describe('Provider connection probes', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          response: JSON.stringify({
-            lines: [
-              {
-                line_index: 0,
-                original: 'Makám celej den',
-                needs_fix: false,
-                alternatives: null,
-              },
-              {
-                line_index: 1,
-                original: 'Hlava plná stresu',
-                needs_fix: false,
-                alternatives: null,
-              },
-            ],
-          }),
+          response: 'OK',
         }),
       } as Response);
 
@@ -163,22 +133,7 @@ describe('Provider connection probes', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          response: JSON.stringify({
-            lines: [
-              {
-                line_index: 0,
-                original: 'Makám celej den',
-                needs_fix: false,
-                alternatives: null,
-              },
-              {
-                line_index: 1,
-                original: 'Hlava plná stresu',
-                needs_fix: false,
-                alternatives: null,
-              },
-            ],
-          }),
+          response: 'OK',
         }),
       } as Response);
 
@@ -200,25 +155,10 @@ describe('Provider connection probes', () => {
     );
   });
 
-  it('requires Gemini to return valid analyze JSON during key verification', async () => {
+  it('requires Gemini to return the lightweight connection ping confirmation', async () => {
     geminiMock.__mockGenerateContent.mockResolvedValueOnce({
       response: {
-        text: () => JSON.stringify({
-          lines: [
-            {
-              line_index: 0,
-              original: 'Makám celej den',
-              needs_fix: false,
-              alternatives: null,
-            },
-            {
-              line_index: 1,
-              original: 'Hlava plná stresu',
-              needs_fix: false,
-              alternatives: null,
-            },
-          ],
-        }),
+        text: () => 'OK',
       },
     });
 

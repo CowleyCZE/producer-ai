@@ -49,11 +49,8 @@ interface RawAnalysisLine {
   alternatives?: unknown;
 }
 
-const CONNECTION_PROBE_TEXT = ['Makám celej den', 'Hlava plná stresu'].join('\n');
-const CONNECTION_PROBE_OPTIONS: AnalyzeOptions = {
-  style: StyleOption.BOOMBAP,
-  energy: EnergyOption.MEDIUM,
-};
+const CONNECTION_PROBE_PROMPT = 'Odpověz přesně textem OK.';
+const CONNECTION_PROBE_SYSTEM_PROMPT = 'Jsi test dostupnosti AI modelu. Odpovídej stručně a bez formátování.';
 
 class SemanticCache {
   private cache: Map<string, CacheEntry> = new Map();
@@ -445,15 +442,14 @@ export async function testGeminiKey(apiKey: string, modelName = getModelForProvi
     const responseText = await callGeminiWithConfig(
       apiKey,
       modelName || GEMINI_MODEL,
-      buildAnalyzePrompt(CONNECTION_PROBE_TEXT, CONNECTION_PROBE_OPTIONS),
-      getAnalyzeSystemPrompt(),
+      CONNECTION_PROBE_PROMPT,
+      CONNECTION_PROBE_SYSTEM_PROMPT,
       {
         temperature: 0.2,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 32,
       },
     );
-    const parsed = parseJSONResponse(responseText);
-    return validateConnectionProbeResponse(parsed, CONNECTION_PROBE_TEXT);
+    return responseText.trim().toUpperCase().includes('OK');
   } catch (error) {
     console.error('API key test failed:', error);
     return false;
@@ -504,15 +500,14 @@ export async function testOllama(modelName = getOllamaModel(), baseUrl = getOlla
     const responseText = await callOllamaWithConfig(
       selectedModel,
       baseUrl,
-      buildAnalyzePrompt(CONNECTION_PROBE_TEXT, CONNECTION_PROBE_OPTIONS),
-      getAnalyzeSystemPrompt(),
+      CONNECTION_PROBE_PROMPT,
+      CONNECTION_PROBE_SYSTEM_PROMPT,
       {
         temperature: 0.2,
-        numPredict: 1024,
+        numPredict: 32,
       },
     );
-    const parsed = parseJSONResponse(responseText);
-    return validateConnectionProbeResponse(parsed, CONNECTION_PROBE_TEXT);
+    return responseText.trim().toUpperCase().includes('OK');
   } catch (error) {
     console.error('Ollama probe failed:', error);
     return false;
@@ -529,15 +524,14 @@ async function testOpenAiCompatibleProvider(
       provider,
       apiKey,
       modelName,
-      buildAnalyzePrompt(CONNECTION_PROBE_TEXT, CONNECTION_PROBE_OPTIONS),
-      getAnalyzeSystemPrompt(),
+      CONNECTION_PROBE_PROMPT,
+      CONNECTION_PROBE_SYSTEM_PROMPT,
       {
         temperature: 0.2,
-        maxTokens: 1024,
+        maxTokens: 32,
       },
     );
-    const parsed = parseJSONResponse(responseText);
-    return validateConnectionProbeResponse(parsed, CONNECTION_PROBE_TEXT);
+    return responseText.trim().toUpperCase().includes('OK');
   } catch (error) {
     console.error('OpenAI-compatible provider test failed:', error);
     return false;
