@@ -464,7 +464,6 @@ export async function getAvailableOllamaModels(baseUrl = getOllamaBaseUrl()): Pr
   try {
     const response = await fetchWithTimeout(`${normalizeBaseUrl(baseUrl)}/api/tags`, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
     });
 
     if (!response.ok) {
