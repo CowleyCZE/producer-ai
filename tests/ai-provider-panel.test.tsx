@@ -1,3 +1,4 @@
+import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AiProviderPanel from '../features/settings/AiProviderPanel';
@@ -560,5 +561,35 @@ describe('AiProviderPanel', () => {
     });
 
     expect(screen.queryByText(/V telefonu jsem zatím nenašel žádný dostupný model/i)).not.toBeInTheDocument();
+  });
+
+  it('completes provider connect flow in React StrictMode', async () => {
+    render(
+      <React.StrictMode>
+        <ToastProvider>
+          <AiProviderPanel />
+        </ToastProvider>
+      </React.StrictMode>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Gemini API připravena')).toBeInTheDocument();
+    });
+
+    if (!screen.queryByRole('button', { name: /OpenAI/i })) {
+      fireEvent.click(screen.getByText('AI Backend'));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI/i }));
+    fireEvent.change(screen.getByPlaceholderText('Zadejte API key...'), {
+      target: { value: 'openai-key' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('gpt-4.1-mini'), {
+      target: { value: 'gpt-4.1-mini' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Připojit OpenAI/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ OpenAI připravena')).toBeInTheDocument();
+    });
   });
 });
