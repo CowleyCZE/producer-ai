@@ -66,6 +66,8 @@ const OLLAMA_NON_GENERATIVE_FAMILIES = new Set(['bert']);
 const OLLAMA_ANALYZE_NUM_PREDICT = 384;
 const OLLAMA_REGENERATE_NUM_PREDICT = 192;
 const OLLAMA_NUM_CTX = 2048;
+const OLLAMA_ANALYZE_PREFILL_LIMIT = 4;
+const OLLAMA_CONTEXT_RADIUS = 1;
 
 class SemanticCache {
   private cache: Map<string, CacheEntry> = new Map();
@@ -863,6 +865,22 @@ Pravidla:
 - bez komentářů, bez markdownu, jen JSON`;
 }
 
+function buildOllamaLineContextText(text: string, lineId: string): string {
+  const lines = text.split('\n').slice(0, MAX_LINES);
+  const targetIndex = Number.parseInt(lineId.replace('line-', ''), 10) || 0;
+  const startIndex = Math.max(0, targetIndex - OLLAMA_CONTEXT_RADIUS);
+  const endIndex = Math.min(lines.length - 1, targetIndex + OLLAMA_CONTEXT_RADIUS);
+
+  return lines
+    .slice(startIndex, endIndex + 1)
+    .map((line, offset) => {
+      const lineIndex = startIndex + offset;
+      const prefix = lineIndex === targetIndex ? 'CIL' : 'KONTEXT';
+      return `[${prefix} ${lineIndex}] ${line}`;
+    })
+    .join('\n');
+}
+
 async function callOllamaWithConfig(
   modelName: string,
   baseUrl: string,
@@ -906,6 +924,23 @@ async function callOllama(prompt: string, systemPrompt: string): Promise<string>
       timeoutMs: OLLAMA_REQUEST_TIMEOUT_MS,
     },
   );
+}
+
+async function callOllamaRegenerateForLine(line: EditableLine, fullText: string, options: AnalyzeOptions): Promise<LineAlternatives | null> {
+  const responseText = await callOllamaWithConfig(
+    getOllamaModel(),
+    getOllamaBaseUrl(),
+    buildOllamaRegeneratePrompt(buildOllamaLineContextText(fullText, line.id), line, options),
+    'Jsi český rapový editor. Odpověz jen validním JSONem.',
+    {
+      numPredict: OLLAMA_REGENERATE_NUM_PREDICT,
+      numCtx: OLLAMA_NUM_CTX,
+      timeoutMs: OLLAMA_REQUEST_TIMEOUT_MS,
+    },
+  );
+
+  const parsed = parseJSONResponse(responseText) as { alternatives?: unknown };
+  return normalizeAlternatives(parsed.alternatives, line.original);
 }
 
 function extractOpenAiCompatibleText(content: unknown): string {
@@ -1342,6 +1377,60 @@ function createFallbackLines(text: string): EditableLine[] {
   });
 }
 
+async function analyzeLyricsWithOllama(text: string, options: AnalyzeOptions): Promise<AnalysisResult> {
+  const fallbackLines = createFallbackLines(text);
+  const linesWithContent = fallbackLines.filter((line) => line.original.trim().length > 0);
+  const candidateLines = linesWithContent
+    .filter((line) => line.needsFix)
+    .slice(0, OLLAMA_ANALYZE_PREFILL_LIMIT);
+
+  if (!candidateLines.length) {
+    return {
+      lines: fallbackLines,
+      usedFallback: true,
+      fallbackMessage: 'Lokální Ollama používá lehčí režim. Nenašel jsem řádky vhodné pro okamžitou AI úpravu, ale text můžeš dál upravovat ručně.',
+    };
+  }
+
+  const updatedLines = [...fallbackLines];
+  let enrichedCount = 0;
+
+  for (const candidateLine of candidateLines) {
+    try {
+      const alternatives = await callOllamaRegenerateForLine(candidateLine, text, options);
+      if (!alternatives) {
+        continue;
+      }
+
+      const targetIndex = updatedLines.findIndex((line) => line.id === candidateLine.id);
+      if (targetIndex < 0) {
+        continue;
+      }
+
+      updatedLines[targetIndex] = {
+        ...updatedLines[targetIndex],
+        alternatives,
+      };
+      enrichedCount += 1;
+    } catch (error) {
+      console.error(`Ollama line enrichment failed for ${candidateLine.id}:`, error);
+    }
+  }
+
+  const remainingCount = fallbackLines.filter((line) => line.needsFix).length - enrichedCount;
+  const fallbackMessage = enrichedCount > 0
+    ? remainingCount > 0
+      ? `Lokální Ollama běží v lehkém režimu. Připravil jsem varianty pro ${enrichedCount} řádků, zbytek můžeš doplnit přes "Zkus znovu" po jednotlivých řádcích.`
+      : 'Lokální Ollama běží v lehkém režimu. Varianty jsem připravil po jednotlivých řádcích.'
+    : 'Lokální Ollama na tomto stroji nezvládla hromadnou AI úpravu, proto jsem zapnul lehký fallback. Problematické řádky můžeš zkusit regenerovat po jednom.';
+
+  return {
+    lines: updatedLines,
+    usedFallback: true,
+    fallbackMessage,
+  };
+}
+
 function normalizeAnalysisResponse(parsed: unknown, originalText: string): AnalysisResult {
   const originalLines = originalText.split('\n').slice(0, MAX_LINES);
   const payload = parsed as { lines?: RawAnalysisLine[] };
@@ -1454,12 +1543,21 @@ export async function analyzeLyrics(text: string, options: AnalyzeOptions): Prom
 
   try {
     const activeProvider = getProvider();
-    const prompt = activeProvider === ModelProvider.OLLAMA
-      ? buildOllamaAnalyzePrompt(limitedText, options)
-      : buildAnalyzePrompt(limitedText, options);
-    const systemPrompt = activeProvider === ModelProvider.OLLAMA
-      ? 'Jsi český rapový editor. Odpověz jen validním JSONem.'
-      : getAnalyzeSystemPrompt();
+    if (activeProvider === ModelProvider.OLLAMA) {
+      const ollamaResult = await analyzeLyricsWithOllama(limitedText, options);
+      const finalOllamaResult = wasTruncated
+        ? {
+            ...ollamaResult,
+            usedFallback: true,
+            fallbackMessage: `Text je delší než ${MAX_LINES} řádků, proto jsem zpracoval jen prvních ${MAX_LINES}.`,
+          }
+        : ollamaResult;
+      semanticCache.set(limitedText, options.style, options.energy, ollamaResult);
+      return finalOllamaResult;
+    }
+
+    const prompt = buildAnalyzePrompt(limitedText, options);
+    const systemPrompt = getAnalyzeSystemPrompt();
     const responseText = await callAI(prompt, systemPrompt);
     const parsed = parseJSONResponse(responseText);
     const result = normalizeAnalysisResponse(parsed, limitedText);
@@ -1498,12 +1596,12 @@ export async function regenerateLine(
 
   try {
     const activeProvider = getProvider();
-    const prompt = activeProvider === ModelProvider.OLLAMA
-      ? buildOllamaRegeneratePrompt(fullText, line, options)
-      : buildRegeneratePrompt(fullText, line, options);
-    const systemPrompt = activeProvider === ModelProvider.OLLAMA
-      ? 'Jsi český rapový editor. Odpověz jen validním JSONem.'
-      : getRegenerateSystemPrompt();
+    if (activeProvider === ModelProvider.OLLAMA) {
+      return callOllamaRegenerateForLine(line, fullText, options);
+    }
+
+    const prompt = buildRegeneratePrompt(fullText, line, options);
+    const systemPrompt = getRegenerateSystemPrompt();
     const responseText = await callAI(prompt, systemPrompt);
 
     const parsed = parseJSONResponse(responseText) as { alternatives?: unknown };
