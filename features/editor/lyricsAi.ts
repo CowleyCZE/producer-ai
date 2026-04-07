@@ -264,6 +264,30 @@ function safeLocalStorageRemoveItem(key: string): void {
   }
 }
 
+function safeSessionStorageGetItem(key: string): string | null {
+  try {
+    return getSessionStorageOrNull()?.getItem(key) || null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSessionStorageSetItem(key: string, value: string): void {
+  try {
+    getSessionStorageOrNull()?.setItem(key, value);
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
+}
+
+function safeSessionStorageRemoveItem(key: string): void {
+  try {
+    getSessionStorageOrNull()?.removeItem(key);
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
+}
+
 function isGeminiEnvApiKeyDisabled(): boolean {
   return safeLocalStorageGetItem(GEMINI_ENV_API_KEY_DISABLED_KEY) === '1';
 }
@@ -288,8 +312,7 @@ export function getProviderApiKey(provider: ModelProvider): string | null {
     return null;
   }
 
-  const storage = getSessionStorageOrNull();
-  const sessionValue = storage?.getItem(key) || null;
+  const sessionValue = safeSessionStorageGetItem(key);
   if (sessionValue) {
     volatileApiKeyCache.set(provider, sessionValue);
     return sessionValue;
@@ -316,7 +339,7 @@ export function getProviderApiKeySource(provider: ModelProvider): ApiKeySource {
     return null;
   }
 
-  const sessionValue = getSessionStorageOrNull()?.getItem(key) || null;
+  const sessionValue = safeSessionStorageGetItem(key);
   if (sessionValue) {
     volatileApiKeyCache.set(provider, sessionValue);
     return 'session';
@@ -340,7 +363,7 @@ export function setProviderApiKey(provider: ModelProvider, apiKey: string): void
   }
 
   volatileApiKeyCache.set(provider, apiKey);
-  getSessionStorageOrNull()?.setItem(key, apiKey);
+  safeSessionStorageSetItem(key, apiKey);
   if (provider === ModelProvider.GEMINI) {
     setGeminiEnvApiKeyDisabled(false);
     genAI = new GoogleGenerativeAI(apiKey);
@@ -355,7 +378,7 @@ export function clearProviderApiKey(provider: ModelProvider): void {
   }
 
   volatileApiKeyCache.delete(provider);
-  getSessionStorageOrNull()?.removeItem(key);
+  safeSessionStorageRemoveItem(key);
   if (provider === ModelProvider.GEMINI) {
     setGeminiEnvApiKeyDisabled(true);
     genAI = null;
