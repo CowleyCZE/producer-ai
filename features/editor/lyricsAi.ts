@@ -600,13 +600,27 @@ export async function testOllama(modelName = getOllamaModel(), baseUrl = getOlla
         temperature: 0.2,
         numPredict: 8,
         timeoutMs: OLLAMA_PROBE_TIMEOUT_MS,
+        responseFormat: 'text',
       },
     );
-    return responseText.trim().toUpperCase().includes('OK');
+    return isLikelySuccessfulOllamaProbe(responseText);
   } catch (error) {
     console.error('Ollama probe failed:', error);
     return false;
   }
+}
+
+function isLikelySuccessfulOllamaProbe(responseText: string): boolean {
+  const normalized = responseText.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized.toUpperCase().includes('OK')) {
+    return true;
+  }
+
+  return normalized.length >= 2;
 }
 
 async function testOpenAiCompatibleProvider(
@@ -785,7 +799,7 @@ async function callOllamaWithConfig(
   baseUrl: string,
   prompt: string,
   systemPrompt: string,
-  options: { temperature?: number; numPredict?: number; timeoutMs?: number } = {},
+  options: { temperature?: number; numPredict?: number; timeoutMs?: number; responseFormat?: 'json' | 'text' } = {},
 ): Promise<string> {
   const response = await fetchWithTimeout(`${getOllamaRequestBaseUrl(baseUrl)}/api/generate`, {
     method: 'POST',
@@ -794,7 +808,7 @@ async function callOllamaWithConfig(
       model: modelName,
       prompt: `${systemPrompt}\n\n${prompt}`,
       stream: false,
-      format: 'json',
+      format: options.responseFormat === 'text' ? undefined : 'json',
       options: {
         temperature: options.temperature ?? 0.7,
         num_predict: options.numPredict ?? 2048,

@@ -181,6 +181,28 @@ describe('Provider connection probes', () => {
     );
   });
 
+  it('accepts non-empty Ollama probe text even when model does not answer with literal OK', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          models: [{ name: 'llama3.2:1b', details: { family: 'llama', families: ['llama'] } }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          response: 'Ready to help.',
+        }),
+      } as Response);
+
+    const isValid = await testProviderConnection(ModelProvider.OLLAMA, {
+      modelName: 'llama3.2:1b',
+    });
+
+    expect(isValid).toBe(true);
+  });
+
   it('requires Gemini to return the lightweight connection ping confirmation', async () => {
     geminiMock.__mockGenerateContent.mockResolvedValueOnce({
       response: {
