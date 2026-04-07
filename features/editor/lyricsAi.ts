@@ -27,6 +27,8 @@ const MIN_VARIANT_LENGTH = 3;
 const KEYWORDS_TO_PRESERVE = ['panelák', 'makám', 'děti'];
 const GEMINI_ENV_API_KEY_DISABLED_KEY = 'gemini_env_api_key_disabled';
 const NETWORK_TIMEOUT_MS = 12000;
+const OLLAMA_REQUEST_TIMEOUT_MS = 120000;
+const OLLAMA_PROBE_TIMEOUT_MS = 45000;
 
 export const AI_ANALYZE_LINE_LIMIT = MAX_LINES;
 
@@ -561,7 +563,8 @@ export async function testOllama(modelName = getOllamaModel(), baseUrl = getOlla
       CONNECTION_PROBE_SYSTEM_PROMPT,
       {
         temperature: 0.2,
-        numPredict: 32,
+        numPredict: 8,
+        timeoutMs: OLLAMA_PROBE_TIMEOUT_MS,
       },
     );
     return responseText.trim().toUpperCase().includes('OK');
@@ -747,7 +750,7 @@ async function callOllamaWithConfig(
   baseUrl: string,
   prompt: string,
   systemPrompt: string,
-  options: { temperature?: number; numPredict?: number } = {},
+  options: { temperature?: number; numPredict?: number; timeoutMs?: number } = {},
 ): Promise<string> {
   const response = await fetchWithTimeout(`${getOllamaRequestBaseUrl(baseUrl)}/api/generate`, {
     method: 'POST',
@@ -762,7 +765,7 @@ async function callOllamaWithConfig(
         num_predict: options.numPredict ?? 2048,
       },
     }),
-  });
+  }, options.timeoutMs ?? OLLAMA_REQUEST_TIMEOUT_MS);
 
   if (!response.ok) {
     throw new Error(`Ollama API error: ${response.status}`);
