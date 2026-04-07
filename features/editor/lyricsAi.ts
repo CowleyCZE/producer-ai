@@ -180,7 +180,17 @@ function getBaseUrlStorageKey(provider: ModelProvider): string | null {
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, '');
+  const trimmed = baseUrl.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+  if (/^[a-z][a-z\d+\-.]*:\/\//i.test(withoutTrailingSlash)) {
+    return withoutTrailingSlash;
+  }
+
+  return `http://${withoutTrailingSlash}`;
 }
 
 function getSessionStorageOrNull(): Storage | null {
@@ -392,7 +402,8 @@ export function setBaseUrlForProvider(provider: ModelProvider, baseUrl: string):
     return;
   }
 
-  safeLocalStorageSetItem(storageKey, normalizeBaseUrl(baseUrl) || getProviderDefaultBaseUrl(provider));
+  const valueToStore = normalizeBaseUrl(baseUrl) || getProviderDefaultBaseUrl(provider);
+  safeLocalStorageSetItem(storageKey, valueToStore);
 }
 
 export function getOllamaModel(): string {
