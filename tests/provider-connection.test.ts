@@ -27,7 +27,7 @@ vi.mock('@google/generative-ai', () => {
 });
 
 import * as geminiModule from '@google/generative-ai';
-import { testGeminiKey, testProviderConnection } from '../features/editor/lyricsAi';
+import { getAvailableOllamaModels, testGeminiKey, testProviderConnection } from '../features/editor/lyricsAi';
 import { ModelProvider } from '../features/editor/editorTypes';
 
 const geminiMock = geminiModule as typeof geminiModule & {
@@ -120,6 +120,32 @@ describe('Provider connection probes', () => {
       'http://localhost:11434/api/generate',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('filters Ollama embedding models out of the selectable model list', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        models: [
+          {
+            name: 'all-minilm:22m',
+            details: { family: 'bert', families: ['bert'] },
+          },
+          {
+            name: 'llama3.2:1b',
+            details: { family: 'llama', families: ['llama'] },
+          },
+          {
+            name: 'tinyllama:latest',
+            details: { family: 'llama', families: ['llama'] },
+          },
+        ],
+      }),
+    } as Response);
+
+    const models = await getAvailableOllamaModels('http://localhost:11434');
+
+    expect(models).toEqual(['llama3.2:1b', 'tinyllama:latest']);
   });
 
   it('uses the configured Ollama base URL instead of a hardcoded localhost endpoint', async () => {

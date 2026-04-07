@@ -51,8 +51,18 @@ interface RawAnalysisLine {
   alternatives?: unknown;
 }
 
+interface OllamaModelTag {
+  name?: string;
+  details?: {
+    family?: string;
+    families?: string[];
+  };
+}
+
 const CONNECTION_PROBE_PROMPT = 'Odpověz přesně textem OK.';
 const CONNECTION_PROBE_SYSTEM_PROMPT = 'Jsi test dostupnosti AI modelu. Odpovídej stručně a bez formátování.';
+const OLLAMA_EMBEDDING_NAME_HINTS = ['embed', 'embedding', 'minilm', 'bge', 'e5'];
+const OLLAMA_NON_GENERATIVE_FAMILIES = new Set(['bert']);
 
 class SemanticCache {
   private cache: Map<string, CacheEntry> = new Map();
@@ -527,7 +537,8 @@ export async function getAvailableOllamaModels(baseUrl = getOllamaBaseUrl()): Pr
 
     const data = await response.json();
     return (data.models || [])
-      .map((model: { name?: string }) => model?.name?.trim())
+      .filter((model: OllamaModelTag) => isLikelyGenerativeOllamaModel(model))
+      .map((model: OllamaModelTag) => model?.name?.trim())
       .filter((name: string | undefined): name is string => Boolean(name));
   } catch (error) {
     console.error('Ollama test failed:', error);
@@ -535,12 +546,36 @@ export async function getAvailableOllamaModels(baseUrl = getOllamaBaseUrl()): Pr
   }
 }
 
+function isLikelyGenerativeOllamaModel(model: OllamaModelTag): boolean {
+  const name = model.name?.trim().toLowerCase() || '';
+  const families = [
+    model.details?.family,
+    ...(model.details?.families || []),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+
+  if (families.some((family) => OLLAMA_NON_GENERATIVE_FAMILIES.has(family))) {
+    return false;
+  }
+
+  if (OLLAMA_EMBEDDING_NAME_HINTS.some((hint) => name.includes(hint))) {
+    return false;
+  }
+
+  return Boolean(name);
+}
+
 function pickDefaultOllamaModel(models: string[]): string | null {
   if (!models.length) {
     return null;
   }
 
-  return models.find((model) => model.includes('qwen')) || models[0];
+  return (
+    models.find((model) => /qwen/i.test(model))
+    || models.find((model) => /(llama|mistral|gemma|phi|deepseek|mixtral)/i.test(model))
+    || models[0]
+  );
 }
 
 export async function testOllama(modelName = getOllamaModel(), baseUrl = getOllamaBaseUrl()): Promise<boolean> {

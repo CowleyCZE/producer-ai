@@ -80,7 +80,7 @@ const PROVIDER_OPTIONS: ProviderMeta[] = [
     description: 'Modely dostupné přímo v telefonu',
     connectLabel: 'Připojit k Ollama',
     modelLabel: 'Stažený Ollama model',
-    modelHelp: 'Po přepnutí se načte seznam modelů, které má lokální Ollama na zařízení.',
+    modelHelp: 'Po přepnutí se načte seznam textových modelů z lokální Ollama. Embedding modely se pro úpravu textu nepoužijí.',
   },
 ];
 
@@ -578,7 +578,7 @@ const AiProviderPanel: React.FC<AiProviderPanelProps> = ({ onStatusChange }) => 
                 ) : null}
                 {showOllamaEmptyState ? (
                   <p className="mt-2 text-xs text-warning">
-                    V telefonu jsem zatím nenašel žádný dostupný model. Zkontrolujte `ollama serve` a stažené modely.
+                    V Ollama teď nevidím žádný textový model pro generování. Zkontrolujte `ollama serve` a že máte stažený generativní model, ne jen embedding model.
                   </p>
                 ) : null}
                 {ollamaModels.length > 0 ? (
