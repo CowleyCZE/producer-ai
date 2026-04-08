@@ -1225,42 +1225,68 @@ function normalizeAlternatives(source: unknown, original: string): LineAlternati
     return null;
   }
 
+  const variantOrder: Array<keyof LineAlternatives> = ['balanced', 'flow', 'rhyme'];
   const alternatives = source as Record<string, unknown>;
-  const normalized: LineAlternatives = {
-    balanced: sanitizeAlternativeText(alternatives.balanced),
-    flow: sanitizeAlternativeText(alternatives.flow),
-    rhyme: sanitizeAlternativeText(alternatives.rhyme),
-  };
-
   const originalLength = Math.max(original.trim().length, 1);
-  const allValues = Object.values(normalized);
   const normalizedOriginal = normalizeCompareText(original);
   const originalSyllables = countSyllables(original);
-  const distinctNormalizedValues = new Set(allValues.map((value) => normalizeCompareText(value)).filter(Boolean));
-  const hasEmptyValue = allValues.some((value) => !value);
-  const tooShortValue = allValues.some((value) => value.length < MIN_VARIANT_LENGTH);
-  const exceedsDelta = allValues.some((value) => Math.abs(value.length - originalLength) / originalLength > MAX_LINE_LENGTH_DELTA);
-  const exceedsSyllableDelta = allValues.some((value) => Math.abs(countSyllables(value) - originalSyllables) > MAX_SYLLABLE_DELTA);
-  const matchesOriginalTooClosely = allValues.some((value) => normalizeCompareText(value) === normalizedOriginal);
-  const hasDuplicateAlternatives = distinctNormalizedValues.size !== allValues.length;
+  const normalizedCandidates = variantOrder.map((variant) => {
+    const text = sanitizeAlternativeText(alternatives[variant]);
+    const normalizedText = normalizeCompareText(text);
+    const keywordSafe = preservesKeywords(original, [text]);
+    const isUsable = Boolean(text)
+      && text.length >= MIN_VARIANT_LENGTH
+      && Math.abs(text.length - originalLength) / originalLength <= MAX_LINE_LENGTH_DELTA
+      && Math.abs(countSyllables(text) - originalSyllables) <= MAX_SYLLABLE_DELTA
+      && keywordSafe;
 
-  if (
-    hasEmptyValue
-    || tooShortValue
-    || exceedsDelta
-    || exceedsSyllableDelta
-    || matchesOriginalTooClosely
-    || hasDuplicateAlternatives
-  ) {
+    return {
+      variant,
+      text,
+      normalizedText,
+      isUsable,
+      matchesOriginal: normalizedText === normalizedOriginal,
+    };
+  });
+
+  const usableCandidates = normalizedCandidates.filter((candidate) => candidate.isUsable);
+  if (!usableCandidates.length) {
     return null;
   }
 
-  if (!preservesKeywords(original, allValues)) {
-    logHeuristic('keyword', { original, allValues });
+  const hasMeaningfulChange = usableCandidates.some((candidate) => !candidate.matchesOriginal);
+  if (!hasMeaningfulChange) {
     return null;
   }
 
-  return normalized;
+  const chosenAlternatives = {} as LineAlternatives;
+  const usedVariantTexts = new Set<string>();
+
+  variantOrder.forEach((variant) => {
+    const selected = usableCandidates.find((candidate) => (
+      candidate.variant === variant
+      && !candidate.matchesOriginal
+      && !usedVariantTexts.has(candidate.normalizedText)
+    ))
+      || usableCandidates.find((candidate) => (
+        candidate.variant === variant
+        && !candidate.matchesOriginal
+      ))
+      || usableCandidates.find((candidate) => (
+        !candidate.matchesOriginal
+        && !usedVariantTexts.has(candidate.normalizedText)
+      ))
+      || usableCandidates.find((candidate) => !candidate.matchesOriginal)
+      || usableCandidates.find((candidate) => !usedVariantTexts.has(candidate.normalizedText))
+      || usableCandidates[0];
+
+    chosenAlternatives[variant] = selected.text;
+    if (selected.normalizedText) {
+      usedVariantTexts.add(selected.normalizedText);
+    }
+  });
+
+  return chosenAlternatives;
 }
 
 function validateConnectionProbeResponse(parsed: unknown, originalText: string): boolean {

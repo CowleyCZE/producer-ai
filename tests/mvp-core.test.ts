@@ -93,17 +93,21 @@ describe('MVP core flow', () => {
     expect(alternatives).toBeNull();
   });
 
-  it('rejects AI alternatives that collapse into duplicate variants', () => {
+  it('salvages duplicated AI alternatives when at least one usable rewrite exists', () => {
     const alternatives = __testing.normalizeAlternatives(
       {
         balanced: 'Makám celej zas',
         flow: 'Makám celej zas',
-        rhyme: 'Makám celej ven',
+        rhyme: 'Makám celej tlak',
       },
       'Makám celej den',
     );
 
-    expect(alternatives).toBeNull();
+    expect(alternatives).toEqual({
+      balanced: 'Makám celej zas',
+      flow: 'Makám celej zas',
+      rhyme: 'Makám celej tlak',
+    });
   });
 
   it('rejects AI alternatives that violate the ±2 syllable contract', () => {
@@ -169,6 +173,23 @@ describe('MVP core flow', () => {
     );
 
     expect(alternatives).toBeNull();
+  });
+
+  it('salvages valid cloud variants even when one slot is unusable', () => {
+    const alternatives = __testing.normalizeAlternatives(
+      {
+        balanced: 'Makám celej den',
+        flow: 'Makám celej tlak',
+        rhyme: 'Makám celej ven',
+      },
+      'Makám celej den',
+    );
+
+    expect(alternatives).toEqual({
+      balanced: 'Makám celej tlak',
+      flow: 'Makám celej tlak',
+      rhyme: 'Makám celej ven',
+    });
   });
 
   it('keeps original line mapping even when AI returns a different original value', () => {
