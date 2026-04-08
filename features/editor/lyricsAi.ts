@@ -1377,12 +1377,19 @@ function createFallbackLines(text: string): EditableLine[] {
   });
 }
 
+function getOllamaCandidateLines(lines: EditableLine[]): EditableLine[] {
+  const linesWithContent = lines.filter((line) => line.original.trim().length > 0);
+  const heuristicMatches = linesWithContent.filter((line) => line.needsFix);
+  const fallbackMatches = linesWithContent.filter((line) => !line.needsFix);
+
+  return [...heuristicMatches, ...fallbackMatches].slice(0, OLLAMA_ANALYZE_PREFILL_LIMIT);
+}
+
 async function analyzeLyricsWithOllama(text: string, options: AnalyzeOptions): Promise<AnalysisResult> {
   const fallbackLines = createFallbackLines(text);
   const linesWithContent = fallbackLines.filter((line) => line.original.trim().length > 0);
-  const candidateLines = linesWithContent
-    .filter((line) => line.needsFix)
-    .slice(0, OLLAMA_ANALYZE_PREFILL_LIMIT);
+  const heuristicCandidateCount = linesWithContent.filter((line) => line.needsFix).length;
+  const candidateLines = getOllamaCandidateLines(fallbackLines);
 
   if (!candidateLines.length) {
     return {
@@ -1409,6 +1416,7 @@ async function analyzeLyricsWithOllama(text: string, options: AnalyzeOptions): P
 
       updatedLines[targetIndex] = {
         ...updatedLines[targetIndex],
+        needsFix: true,
         alternatives,
       };
       enrichedCount += 1;
@@ -1417,12 +1425,16 @@ async function analyzeLyricsWithOllama(text: string, options: AnalyzeOptions): P
     }
   }
 
-  const remainingCount = fallbackLines.filter((line) => line.needsFix).length - enrichedCount;
+  const remainingHeuristicCount = Math.max(0, heuristicCandidateCount - enrichedCount);
   const fallbackMessage = enrichedCount > 0
-    ? remainingCount > 0
-      ? `Lokální Ollama běží v lehkém režimu. Připravil jsem varianty pro ${enrichedCount} řádků, zbytek můžeš doplnit přes "Zkus znovu" po jednotlivých řádcích.`
-      : 'Lokální Ollama běží v lehkém režimu. Varianty jsem připravil po jednotlivých řádcích.'
-    : 'Lokální Ollama na tomto stroji nezvládla hromadnou AI úpravu, proto jsem zapnul lehký fallback. Problematické řádky můžeš zkusit regenerovat po jednom.';
+    ? heuristicCandidateCount > 0
+      ? remainingHeuristicCount > 0
+        ? `Lokální Ollama běží v lehkém režimu. Připravil jsem varianty pro ${enrichedCount} řádků, zbytek můžeš doplnit přes "Zkus znovu" po jednotlivých řádcích.`
+        : 'Lokální Ollama běží v lehkém režimu. Varianty jsem připravil po jednotlivých řádcích.'
+      : `Lokální Ollama běží v lehkém režimu. Heuristika nenašla jasně slabé řádky, proto jsem připravil varianty pro ${enrichedCount} úvodních řádků textu.`
+    : heuristicCandidateCount > 0
+      ? 'Lokální Ollama na tomto stroji nezvládla hromadnou AI úpravu, proto jsem zapnul lehký fallback. Problematické řádky můžeš zkusit regenerovat po jednom.'
+      : 'Lokální Ollama běží v lehkém režimu. Heuristika nenašla jasně slabé řádky a lokální model zatím nevygeneroval bezpečné varianty.';
 
   return {
     lines: updatedLines,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __testing,
   AI_ANALYZE_LINE_LIMIT,
@@ -7,11 +7,19 @@ import {
   isLineResolved,
   resolveLineText,
   semanticCache,
+  setOllamaModel,
+  setProvider,
 } from '../features/editor/lyricsAi';
 import { diffText } from '../features/editor/textDiff';
-import { EditableLine, EnergyOption, StyleOption } from '../features/editor/editorTypes';
+import { EditableLine, EnergyOption, ModelProvider, StyleOption } from '../features/editor/editorTypes';
 
 describe('MVP core flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
   it('assembles the final text from selected line variants', () => {
     const lines: EditableLine[] = [
       {
@@ -300,5 +308,49 @@ describe('MVP core flow', () => {
     expect(result.lines).toHaveLength(AI_ANALYZE_LINE_LIMIT);
     expect(result.usedFallback).toBe(true);
     expect(result.fallbackMessage).toContain(`${AI_ANALYZE_LINE_LIMIT}`);
+  });
+
+  it('prefills lightweight Ollama suggestions even when heuristics do not flag any line', async () => {
+    setProvider(ModelProvider.OLLAMA);
+    setOllamaModel('llama3.2:1b');
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          response: JSON.stringify({
+            alternatives: {
+              balanced: 'Makám každej den dál',
+              flow: 'Makám celej den zas',
+              rhyme: 'Makám celej den ven',
+            },
+          }),
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          response: JSON.stringify({
+            alternatives: {
+              balanced: 'Hlava plná tlaku dnes',
+              flow: 'Hlava jede v tlaku dnes',
+              rhyme: 'Hlava nese stres i děs',
+            },
+          }),
+        }),
+      } as Response);
+
+    const result = await analyzeLyrics('Makám celej den dál\nHlava plná stresu dnes', {
+      style: StyleOption.BOOMBAP,
+      energy: EnergyOption.MEDIUM,
+    });
+
+    expect(result.usedFallback).toBe(true);
+    expect(result.fallbackMessage).toContain('Heuristika nenašla jasně slabé řádky');
+    expect(result.lines[0]?.needsFix).toBe(true);
+    expect(result.lines[0]?.alternatives?.balanced).toBe('Makám každej den dál');
+    expect(result.lines[1]?.needsFix).toBe(true);
+    expect(result.lines[1]?.alternatives?.flow).toBe('Hlava jede v tlaku dnes');
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
