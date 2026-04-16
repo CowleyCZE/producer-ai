@@ -36,10 +36,28 @@ class LyricsEditorService(private val context: Context) {
     private var llmInference: LlmInference? = null
     private val inferenceLock = Any()
     private val supportedModes = setOf("AUTO", "BALANCED", "FLOW", "RHYME")
-    private val minimumModelSizeBytes = 1L * 1024L * 1024L
     private val maxAnalyzeLines = 80
     private val maxAnalyzeTextChars = 8000
     private val maxContextChars = 2000
+
+    companion object {
+        internal const val MINIMUM_MODEL_SIZE_BYTES = 1L * 1024L * 1024L
+        internal const val MAX_ANALYZE_LINES = 80
+        internal const val MAX_ANALYZE_TEXT_CHARS = 8000
+
+        internal fun normalizePromptText(rawText: String): String {
+            if (rawText.isBlank()) {
+                return ""
+            }
+
+            val normalizedLines = rawText
+                .lineSequence()
+                .take(MAX_ANALYZE_LINES)
+                .joinToString("\n")
+
+            return normalizedLines.trim().take(MAX_ANALYZE_TEXT_CHARS)
+        }
+    }
 
     private val json = Json {
         isLenient = true
@@ -101,7 +119,7 @@ class LyricsEditorService(private val context: Context) {
         if (modelFile.length() <= 0L) {
             throw IllegalArgumentException("Model file is empty: $modelFile")
         }
-        if (modelFile.length() < minimumModelSizeBytes) {
+        if (modelFile.length() < MINIMUM_MODEL_SIZE_BYTES) {
             throw IllegalArgumentException("Model file is too small to be a valid LLM model: $modelFile")
         }
         if (!isSupportedModelFile(modelFile, sourceUri)) {
